@@ -1,0 +1,20 @@
+{
+  "calories": {
+    "daily": 1800,
+    "adjustment": "Cut — aiming for gradual fat loss"
+  },
+  "macros": {
+    "protein": { "grams": 130, "priority": "high" },
+    "carbs": { "grams": 200, "priority": "medium" },
+    "fat": { "grams": 70, "priority": "low" }
+  },
+  "water": {
+    "daily_oz": 96
+  },
+  "weight": {
+    "current": null,
+    "goal": null,
+    "unit": "lbs"
+  },
+  "notes": "Edit this file to set your personal goals. These are used by Claude during nightly processing."
+}

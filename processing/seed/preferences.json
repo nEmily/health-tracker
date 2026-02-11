@@ -1,0 +1,19 @@
+{
+  "dietary": {
+    "restrictions": [],
+    "dislikes": [],
+    "favorites": [],
+    "notes": "e.g. restrictions: ['vegetarian'], dislikes: ['mushrooms'], favorites: ['salmon', 'Greek yogurt']"
+  },
+  "mealPlan": {
+    "mealsPerDay": 3,
+    "includeSnacks": true,
+    "cookingLevel": "moderate",
+    "prepTimeMax": "30 min",
+    "notes": "cookingLevel: minimal | moderate | advanced"
+  },
+  "workout": {
+    "checkInDay": "sunday",
+    "notes": "Day of the week for weekly workout review"
+  }
+}

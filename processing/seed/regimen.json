@@ -1,0 +1,15 @@
+{
+  "description": "Describe your workout plan here in natural language",
+  "updatedAt": null,
+  "weeklySchedule": [
+    { "day": "monday", "type": "rest", "description": "Rest" },
+    { "day": "tuesday", "type": "rest", "description": "Rest" },
+    { "day": "wednesday", "type": "rest", "description": "Rest" },
+    { "day": "thursday", "type": "rest", "description": "Rest" },
+    { "day": "friday", "type": "rest", "description": "Rest" },
+    { "day": "saturday", "type": "rest", "description": "Rest" },
+    { "day": "sunday", "type": "rest", "description": "Rest" }
+  ],
+  "nextWeekProposal": null,
+  "weeklyReview": null
+}
