@@ -477,6 +477,94 @@ input[type="range"]::-webkit-slider-thumb {
   display: block;
 }
 
+/* Calendar */
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.cal-month-label {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  position: relative;
+}
+
+.cal-day:not(.empty):active {
+  background: var(--bg-hover);
+}
+
+.cal-day.today .cal-day-num {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.cal-day.selected {
+  background: var(--bg-hover);
+  outline: 2px solid var(--accent-green);
+}
+
+.cal-day-num {
+  font-size: var(--text-sm);
+}
+
+.cal-day-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 2px;
+}
+
+.cal-day-dot.green {
+  background: var(--accent-green);
+}
+
+.cal-day-dot.yellow {
+  background: var(--accent-yellow);
+}
+
+/* Progress Bars */
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-input);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+}
+
 .photo-preview-remove {
   position: absolute;
   top: 6px;

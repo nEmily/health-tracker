@@ -56,6 +56,8 @@ const App = {
     // Screen-specific init
     if (screenId === 'today') App.loadDayView();
     if (screenId === 'log') Log.init();
+    if (screenId === 'calendar') Calendar.init();
+    if (screenId === 'goals') GoalsView.init();
     if (screenId === 'settings') Settings.loadStorageInfo();
   },
 
@@ -106,6 +108,18 @@ const App = {
     // Load daily summary stats
     const summary = await DB.getDailySummary(date);
     App.renderDayStats(summary, entries);
+
+    // Load analysis if available
+    const analysis = await DB.getAnalysis(date);
+    const analysisEl = document.getElementById('today-analysis');
+    if (analysisEl) {
+      if (analysis) {
+        analysisEl.innerHTML = `<h2 class="section-header" style="margin-top: var(--space-lg)">Analysis</h2>` +
+          GoalsView.renderAnalysisSummary(analysis);
+      } else {
+        analysisEl.innerHTML = '';
+      }
+    }
   },
 
   renderDayStats(summary, entries) {
