@@ -74,13 +74,15 @@
 
       <div class="card" style="margin-top: var(--space-sm);">
         <h3 style="font-size: var(--text-base); margin-bottom: var(--space-sm);">Sync</h3>
-        <button class="btn btn-secondary btn-block" disabled style="opacity:0.5">Export Day (Phase 3)</button>
-        <button class="btn btn-secondary btn-block" disabled style="opacity:0.5; margin-top: var(--space-sm);">Import Analysis (Phase 3)</button>
+        <button class="btn btn-primary btn-block" onclick="Sync.exportDay()">Export Today's Data</button>
+        <button class="btn btn-secondary btn-block" style="margin-top: var(--space-sm);" onclick="Sync.importAnalysis()">Import Analysis</button>
+        <button class="btn btn-secondary btn-block" style="margin-top: var(--space-sm);" onclick="Sync.importMealPlan()">Import Meal Plan</button>
       </div>
 
       <div class="card" style="margin-top: var(--space-sm);">
         <h3 style="font-size: var(--text-base); margin-bottom: var(--space-sm);">Storage</h3>
-        <p style="font-size: var(--text-sm); color: var(--text-secondary);">Photo cleanup coming in Phase 3.</p>
+        <div id="storage-info" style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-sm);">Loading...</div>
+        <button class="btn btn-secondary btn-block" id="clear-photos-btn" onclick="Settings.clearPhotos()">Clear Processed Meal Photos</button>
       </div>
 
       <div class="card" style="margin-top: var(--space-sm);">

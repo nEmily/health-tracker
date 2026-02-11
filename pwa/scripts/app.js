@@ -56,6 +56,7 @@ const App = {
     // Screen-specific init
     if (screenId === 'today') App.loadDayView();
     if (screenId === 'log') Log.init();
+    if (screenId === 'settings') Settings.loadStorageInfo();
   },
 
   // --- Navigation ---
@@ -133,6 +134,31 @@ const App = {
         <div class="stat-label">Weight</div>
       </div>
     `;
+  },
+};
+
+// Settings helper
+const Settings = {
+  async loadStorageInfo() {
+    const el = document.getElementById('storage-info');
+    if (!el) return;
+
+    const info = await Sync.getStorageInfo();
+    const parts = [];
+    if (info.unsynced > 0) parts.push(`${info.unsynced} unsynced`);
+    if (info.synced > 0) parts.push(`${info.synced} synced`);
+    if (info.processed > 0) parts.push(`${info.processed} processed`);
+
+    if (parts.length === 0) {
+      el.textContent = 'No photos stored.';
+    } else {
+      el.textContent = `${parts.join(', ')} — ${info.totalSizeMB} MB total`;
+    }
+  },
+
+  async clearPhotos() {
+    await Sync.clearProcessedPhotos();
+    Settings.loadStorageInfo();
   },
 };
 
