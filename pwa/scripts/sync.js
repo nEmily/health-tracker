@@ -19,20 +19,14 @@ const Sync = {
     const logJson = JSON.stringify(data.log, null, 2);
     files.push({ name: `daily/${date}/log.json`, data: new TextEncoder().encode(logJson) });
 
-    // Add photos
+    // Add photos — route body photos to progress/, meal photos to daily/
     for (const photo of data.photoFiles) {
       const arrayBuf = await photo.blob.arrayBuffer();
-      files.push({ name: `daily/${date}/${photo.name}`, data: new Uint8Array(arrayBuf) });
-    }
-
-    // Add body photos to progress folder
-    const bodyPhotos = await DB.getBodyPhotos(date);
-    for (const bp of bodyPhotos) {
-      if (bp.blob) {
-        const arrayBuf = await bp.blob.arrayBuffer();
-        const suffix = bp.id.includes('face') ? 'face.jpg' : 'body.jpg';
-        files.push({ name: `progress/${date}/${suffix}`, data: new Uint8Array(arrayBuf) });
-      }
+      const isBodyPhoto = photo.name.startsWith('body/');
+      const zipPath = isBodyPhoto
+        ? `progress/${date}/${photo.name.replace('body/', '')}`
+        : `daily/${date}/${photo.name}`;
+      files.push({ name: zipPath, data: new Uint8Array(arrayBuf) });
     }
 
     // Build ZIP

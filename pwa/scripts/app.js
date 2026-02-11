@@ -8,13 +8,12 @@ const App = {
     App.selectedDate = UI.today();
     App.updateHeaderDate();
     App.setupNavigation();
-    App.handleRoute();
     window.addEventListener('hashchange', () => App.handleRoute());
 
-    // Initialize DB
+    // Initialize DB, then load the initial route
     DB.openDB().then(() => {
       console.log('DB ready');
-      App.loadDayView();
+      App.handleRoute();
     }).catch(err => {
       console.error('DB init failed:', err);
       UI.toast('Database error', 'error');

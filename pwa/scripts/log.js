@@ -325,13 +325,13 @@ const Log = {
 
   // --- Water Form ---
   buildWaterForm() {
-    const frag = document.createDocumentFragment();
-
-    const container = UI.createElement('div', 'slider-container');
+    // Use a persistent div (not DocumentFragment) so async content appends work
+    const wrapper = UI.createElement('div');
 
     DB.getDailySummary(App.selectedDate).then(summary => {
       const currentOz = summary.water_oz || 0;
 
+      const container = UI.createElement('div', 'slider-container');
       container.innerHTML = `
         <div class="slider-value"><span id="water-display">${currentOz}</span> <span class="unit">oz</span></div>
         <input type="range" id="water-slider" min="0" max="160" step="4" value="${currentOz}">
@@ -340,7 +340,7 @@ const Log = {
           <span>160 oz</span>
         </div>
       `;
-      frag.appendChild(container);
+      wrapper.appendChild(container);
 
       // Quick-add buttons
       const quickRow = UI.createElement('div', 'subtype-row');
@@ -358,7 +358,7 @@ const Log = {
         });
         quickRow.appendChild(chip);
       });
-      frag.appendChild(quickRow);
+      wrapper.appendChild(quickRow);
 
       // Save button
       const saveArea = UI.createElement('div', 'form-group');
@@ -367,25 +367,25 @@ const Log = {
       saveBtn.textContent = 'Save Water Intake';
       saveBtn.addEventListener('click', () => Log.saveWater());
       saveArea.appendChild(saveBtn);
-      frag.appendChild(saveArea);
+      wrapper.appendChild(saveArea);
 
-      requestAnimationFrame(() => {
-        const slider = document.getElementById('water-slider');
-        const display = document.getElementById('water-display');
-        if (slider && display) {
-          slider.addEventListener('input', () => {
-            display.textContent = slider.value;
-          });
-        }
-      });
+      // Attach slider event
+      const slider = document.getElementById('water-slider');
+      const display = document.getElementById('water-display');
+      if (slider && display) {
+        slider.addEventListener('input', () => {
+          display.textContent = slider.value;
+        });
+      }
     });
 
-    return frag;
+    return wrapper;
   },
 
   // --- Weight Form ---
   buildWeightForm() {
-    const frag = document.createDocumentFragment();
+    // Use a persistent div (not DocumentFragment) so async content appends work
+    const wrapper = UI.createElement('div');
 
     DB.getDailySummary(App.selectedDate).then(summary => {
       const currentWeight = summary.weight ? summary.weight.value : '';
@@ -400,7 +400,7 @@ const Log = {
         </div>
         <div style="text-align:center; color:var(--text-muted); font-size:var(--text-sm); margin-top:var(--space-xs);">lbs</div>
       `;
-      frag.appendChild(group);
+      wrapper.appendChild(group);
 
       const saveArea = UI.createElement('div', 'form-group');
       saveArea.style.marginTop = 'var(--space-lg)';
@@ -408,22 +408,21 @@ const Log = {
       saveBtn.textContent = 'Save Weight';
       saveBtn.addEventListener('click', () => Log.saveWeight());
       saveArea.appendChild(saveBtn);
-      frag.appendChild(saveArea);
+      wrapper.appendChild(saveArea);
 
-      requestAnimationFrame(() => {
-        const input = document.getElementById('log-weight');
-        const minus = document.getElementById('weight-minus');
-        const plus = document.getElementById('weight-plus');
-        if (minus) minus.addEventListener('click', () => {
-          input.value = (parseFloat(input.value || 0) - 0.1).toFixed(1);
-        });
-        if (plus) plus.addEventListener('click', () => {
-          input.value = (parseFloat(input.value || 0) + 0.1).toFixed(1);
-        });
+      // Attach +/- buttons (elements are in the DOM now via wrapper)
+      const input = document.getElementById('log-weight');
+      const minus = document.getElementById('weight-minus');
+      const plus = document.getElementById('weight-plus');
+      if (minus) minus.addEventListener('click', () => {
+        input.value = (parseFloat(input.value || 0) - 0.1).toFixed(1);
+      });
+      if (plus) plus.addEventListener('click', () => {
+        input.value = (parseFloat(input.value || 0) + 0.1).toFixed(1);
       });
     });
 
-    return frag;
+    return wrapper;
   },
 
   // --- Shared Form Pieces ---
