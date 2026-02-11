@@ -3,12 +3,21 @@
 const Log = {
   selectedType: null,
   selectedSubtype: null,
+  pendingPhoto: null, // { blob, url } from Camera
 
   init() {
     Log.selectedType = null;
     Log.selectedSubtype = null;
+    Log.clearPendingPhoto();
     Log.renderTypeSelector();
     Log.hideForm();
+  },
+
+  clearPendingPhoto() {
+    if (Log.pendingPhoto) {
+      Camera.revokeURL(Log.pendingPhoto.url);
+      Log.pendingPhoto = null;
+    }
   },
 
   // --- Type Selection ---
@@ -23,6 +32,7 @@ const Log = {
       { type: 'workout', icon: '\u{1F4AA}', label: 'Workout', color: 'var(--color-workout)' },
       { type: 'water', icon: '\u{1F4A7}', label: 'Water', color: 'var(--color-water)' },
       { type: 'weight', icon: '\u{2696}\uFE0F', label: 'Weight', color: 'var(--color-weight)' },
+      { type: 'bodyPhoto', icon: '\u{1F4F7}', label: 'Body Photo', color: 'var(--color-body-photo)' },
     ];
 
     grid.innerHTML = types.map(t => `
@@ -43,6 +53,7 @@ const Log = {
   selectType(type) {
     Log.selectedType = type;
     Log.selectedSubtype = null;
+    Log.clearPendingPhoto();
 
     // Highlight selected
     document.querySelectorAll('.type-btn').forEach(btn => {
@@ -78,12 +89,65 @@ const Log = {
       case 'weight':
         formContent.appendChild(Log.buildWeightForm());
         break;
+      case 'bodyPhoto':
+        formContent.appendChild(Log.buildBodyPhotoForm());
+        break;
     }
   },
 
   hideForm() {
     const form = document.getElementById('log-form');
     if (form) form.style.display = 'none';
+  },
+
+  // --- Photo Button (shared by meal/snack/drink/workout forms) ---
+  buildPhotoButton(preset = 'meal') {
+    const group = UI.createElement('div', 'form-group');
+    group.innerHTML = `
+      <div class="photo-actions">
+        <button class="btn btn-secondary" id="log-photo-capture">\u{1F4F7} Take Photo</button>
+        <button class="btn btn-ghost" id="log-photo-pick">\u{1F5BC}\uFE0F Choose from Library</button>
+      </div>
+      <div id="log-photo-preview-area"></div>
+    `;
+
+    requestAnimationFrame(() => {
+      const captureBtn = document.getElementById('log-photo-capture');
+      const pickBtn = document.getElementById('log-photo-pick');
+
+      if (captureBtn) {
+        captureBtn.addEventListener('click', () => Log.handlePhotoCapture(preset));
+      }
+      if (pickBtn) {
+        pickBtn.addEventListener('click', () => Log.handlePhotoPick(preset));
+      }
+    });
+
+    return group;
+  },
+
+  async handlePhotoCapture(preset) {
+    const result = await Camera.capture(preset);
+    if (result) Log.setPhotoPreview(result);
+  },
+
+  async handlePhotoPick(preset) {
+    const result = await Camera.pick(preset);
+    if (result) Log.setPhotoPreview(result);
+  },
+
+  setPhotoPreview(photo) {
+    Log.clearPendingPhoto();
+    Log.pendingPhoto = photo;
+
+    const area = document.getElementById('log-photo-preview-area');
+    if (!area) return;
+    UI.clearChildren(area);
+
+    const preview = Camera.createPreview(photo.url, () => {
+      Log.clearPendingPhoto();
+    });
+    area.appendChild(preview);
   },
 
   // --- Meal Form ---
@@ -104,14 +168,8 @@ const Log = {
     });
     frag.appendChild(subtypeRow);
 
-    // Photo placeholder (Phase 2)
-    const photoArea = UI.createElement('div', 'form-group');
-    photoArea.innerHTML = `
-      <button class="btn btn-secondary btn-block" id="log-photo-btn" disabled style="opacity:0.5">
-        \u{1F4F7} Add Photo (coming soon)
-      </button>
-    `;
-    frag.appendChild(photoArea);
+    // Photo
+    frag.appendChild(Log.buildPhotoButton('meal'));
 
     // Notes
     frag.appendChild(Log.buildNotesField('What did you eat?'));
@@ -127,14 +185,8 @@ const Log = {
     const frag = document.createDocumentFragment();
     const placeholder = type === 'snack' ? 'What did you have?' : 'What did you drink?';
 
-    // Photo placeholder (Phase 2)
-    const photoArea = UI.createElement('div', 'form-group');
-    photoArea.innerHTML = `
-      <button class="btn btn-secondary btn-block" disabled style="opacity:0.5">
-        \u{1F4F7} Add Photo (coming soon)
-      </button>
-    `;
-    frag.appendChild(photoArea);
+    // Photo
+    frag.appendChild(Log.buildPhotoButton('meal'));
 
     frag.appendChild(Log.buildNotesField(placeholder));
     frag.appendChild(Log.buildSaveButton());
@@ -159,6 +211,9 @@ const Log = {
     });
     frag.appendChild(subtypeRow);
 
+    // Photo (gym screen, etc.)
+    frag.appendChild(Log.buildPhotoButton('meal'));
+
     // Duration
     const durGroup = UI.createElement('div', 'form-group');
     durGroup.innerHTML = `
@@ -178,13 +233,102 @@ const Log = {
     return frag;
   },
 
+  // --- Body Photo Form ---
+  buildBodyPhotoForm() {
+    const frag = document.createDocumentFragment();
+
+    const info = UI.createElement('p', '', 'Take a face photo and a body photo for your progress timeline.');
+    info.style.cssText = 'font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-md);';
+    frag.appendChild(info);
+
+    // Face photo
+    const faceGroup = UI.createElement('div', 'form-group');
+    faceGroup.innerHTML = `
+      <label class="form-label">Face Photo</label>
+      <div class="photo-actions">
+        <button class="btn btn-secondary" id="log-face-capture">\u{1F4F7} Take Photo</button>
+        <button class="btn btn-ghost" id="log-face-pick">\u{1F5BC}\uFE0F Library</button>
+      </div>
+      <div id="log-face-preview-area"></div>
+    `;
+    frag.appendChild(faceGroup);
+
+    // Body photo
+    const bodyGroup = UI.createElement('div', 'form-group');
+    bodyGroup.innerHTML = `
+      <label class="form-label">Body Photo</label>
+      <div class="photo-actions">
+        <button class="btn btn-secondary" id="log-body-capture">\u{1F4F7} Take Photo</button>
+        <button class="btn btn-ghost" id="log-body-pick">\u{1F5BC}\uFE0F Library</button>
+      </div>
+      <div id="log-body-preview-area"></div>
+    `;
+    frag.appendChild(bodyGroup);
+
+    // Notes
+    frag.appendChild(Log.buildNotesField('Any notes about today?'));
+
+    // Save
+    const saveGroup = UI.createElement('div', 'form-group');
+    saveGroup.style.marginTop = 'var(--space-md)';
+    const saveBtn = UI.createElement('button', 'btn btn-primary btn-block btn-lg');
+    saveBtn.textContent = 'Save Progress Photos';
+    saveBtn.addEventListener('click', () => Log.saveBodyPhotos());
+    saveGroup.appendChild(saveBtn);
+    frag.appendChild(saveGroup);
+
+    // Wire up buttons after DOM render
+    requestAnimationFrame(() => {
+      document.getElementById('log-face-capture')?.addEventListener('click', async () => {
+        const result = await Camera.capture('body');
+        if (result) Log.setBodyPhotoPreview('face', result);
+      });
+      document.getElementById('log-face-pick')?.addEventListener('click', async () => {
+        const result = await Camera.pick('body');
+        if (result) Log.setBodyPhotoPreview('face', result);
+      });
+      document.getElementById('log-body-capture')?.addEventListener('click', async () => {
+        const result = await Camera.capture('body');
+        if (result) Log.setBodyPhotoPreview('body', result);
+      });
+      document.getElementById('log-body-pick')?.addEventListener('click', async () => {
+        const result = await Camera.pick('body');
+        if (result) Log.setBodyPhotoPreview('body', result);
+      });
+    });
+
+    return frag;
+  },
+
+  _pendingFacePhoto: null,
+  _pendingBodyPhoto: null,
+
+  setBodyPhotoPreview(which, photo) {
+    const areaId = which === 'face' ? 'log-face-preview-area' : 'log-body-preview-area';
+    const area = document.getElementById(areaId);
+    if (!area) return;
+    UI.clearChildren(area);
+
+    // Clean up old
+    if (which === 'face' && Log._pendingFacePhoto) Camera.revokeURL(Log._pendingFacePhoto.url);
+    if (which === 'body' && Log._pendingBodyPhoto) Camera.revokeURL(Log._pendingBodyPhoto.url);
+
+    if (which === 'face') Log._pendingFacePhoto = photo;
+    else Log._pendingBodyPhoto = photo;
+
+    const preview = Camera.createPreview(photo.url, () => {
+      if (which === 'face') { Camera.revokeURL(Log._pendingFacePhoto?.url); Log._pendingFacePhoto = null; }
+      else { Camera.revokeURL(Log._pendingBodyPhoto?.url); Log._pendingBodyPhoto = null; }
+    });
+    area.appendChild(preview);
+  },
+
   // --- Water Form ---
   buildWaterForm() {
     const frag = document.createDocumentFragment();
 
     const container = UI.createElement('div', 'slider-container');
 
-    // We need to load current value
     DB.getDailySummary(App.selectedDate).then(summary => {
       const currentOz = summary.water_oz || 0;
 
@@ -225,7 +369,6 @@ const Log = {
       saveArea.appendChild(saveBtn);
       frag.appendChild(saveArea);
 
-      // Attach slider event after DOM is updated
       requestAnimationFrame(() => {
         const slider = document.getElementById('water-slider');
         const display = document.getElementById('water-display');
@@ -259,7 +402,6 @@ const Log = {
       `;
       frag.appendChild(group);
 
-      // Save button
       const saveArea = UI.createElement('div', 'form-group');
       saveArea.style.marginTop = 'var(--space-lg)';
       const saveBtn = UI.createElement('button', 'btn btn-primary btn-block btn-lg');
@@ -268,7 +410,6 @@ const Log = {
       saveArea.appendChild(saveBtn);
       frag.appendChild(saveArea);
 
-      // +/- buttons
       requestAnimationFrame(() => {
         const input = document.getElementById('log-weight');
         const minus = document.getElementById('weight-minus');
@@ -323,7 +464,7 @@ const Log = {
       date: App.selectedDate,
       timestamp: new Date().toISOString(),
       notes,
-      photo: null,
+      photo: Log.pendingPhoto ? true : null,
       duration_minutes: null,
     };
 
@@ -337,13 +478,69 @@ const Log = {
     }
 
     try {
-      await DB.addEntry(entry);
+      const photoBlob = Log.pendingPhoto ? Log.pendingPhoto.blob : null;
+      await DB.addEntry(entry, photoBlob);
       UI.toast(`${UI.entryLabel(entry.type, entry.subtype)} logged`);
-      Log.init(); // Reset form
-      // Switch to today view to see the entry
+      Log.pendingPhoto = null; // Don't revoke — blob is now in DB
+      Log.init();
       window.location.hash = '';
     } catch (err) {
       console.error('Save failed:', err);
+      UI.toast('Failed to save', 'error');
+    }
+  },
+
+  async saveBodyPhotos() {
+    const facePhoto = Log._pendingFacePhoto;
+    const bodyPhoto = Log._pendingBodyPhoto;
+
+    if (!facePhoto && !bodyPhoto) {
+      UI.toast('Take at least one photo', 'error');
+      return;
+    }
+
+    const notes = document.getElementById('log-notes')?.value?.trim() || '';
+    const date = App.selectedDate;
+    const timestamp = new Date().toISOString();
+
+    try {
+      // Save face photo as its own entry
+      if (facePhoto) {
+        const faceEntry = {
+          id: UI.generateId('bodyPhoto_face'),
+          type: 'bodyPhoto',
+          subtype: 'face',
+          date,
+          timestamp,
+          notes,
+          photo: true,
+          duration_minutes: null,
+        };
+        await DB.addEntry(faceEntry, facePhoto.blob);
+      }
+
+      // Save body photo as its own entry
+      if (bodyPhoto) {
+        const bodyEntry = {
+          id: UI.generateId('bodyPhoto_body'),
+          type: 'bodyPhoto',
+          subtype: 'body',
+          date,
+          timestamp,
+          notes: facePhoto ? '' : notes, // Only put notes on one entry
+          photo: true,
+          duration_minutes: null,
+        };
+        await DB.addEntry(bodyEntry, bodyPhoto.blob);
+      }
+
+      UI.toast('Progress photos saved');
+      Log._pendingFacePhoto = null;
+      Log._pendingBodyPhoto = null;
+      Log.init();
+      window.location.hash = '';
+    } catch (err) {
+      console.error('Save body photos failed:', err);
       UI.toast('Failed to save', 'error');
     }
   },

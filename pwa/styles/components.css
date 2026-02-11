@@ -454,3 +454,43 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
+
+/* Photo Actions */
+.photo-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+/* Photo Preview */
+.photo-preview {
+  position: relative;
+  display: inline-block;
+  margin-top: var(--space-sm);
+}
+
+.photo-preview-img {
+  width: 100%;
+  max-width: 280px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  display: block;
+}
+
+.photo-preview-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -135,6 +135,19 @@ const UI = {
     div.appendChild(icon);
     div.appendChild(body);
 
+    // Load photo thumbnail if entry has a photo
+    if (entry.photo) {
+      const thumb = UI.createElement('img', 'entry-photo-thumb');
+      thumb.alt = '';
+      thumb.loading = 'lazy';
+      DB.getPhotos(entry.id).then(photos => {
+        if (photos.length > 0 && photos[0].blob) {
+          thumb.src = URL.createObjectURL(photos[0].blob);
+        }
+      });
+      div.appendChild(thumb);
+    }
+
     return div;
   },
 };
