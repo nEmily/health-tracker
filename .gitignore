@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Node (shouldn't need, but just in case)
+node_modules/
+
+# iCloud data (NEVER commit)
+iCloudDrive/
+
+# Session files
+.claude/session-log.md
+
+# Generated icons (keep SVG source, ignore generated PNGs if any)

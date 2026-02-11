@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Dark background -->
+  <rect width="512" height="512" fill="#0f172a"/>
+
+  <!-- Pulse line (ECG wave) -->
+  <g stroke="#22c55e" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left flat section -->
+    <line x1="40" y1="256" x2="120" y2="256"/>
+    <!-- First rise -->
+    <polyline points="120,256 150,220 160,240 170,200 180,256"/>
+    <!-- Middle sections -->
+    <line x1="180" y1="256" x2="240" y2="256"/>
+    <polyline points="240,256 260,235 275,256 290,235 305,256"/>
+    <!-- Right flat section -->
+    <line x1="305" y1="256" x2="472" y2="256"/>
+  </g>
+
+  <!-- Heart shape (centered, green) -->
+  <g fill="#22c55e">
+    <!-- Heart path: two rounded top lobes meeting at a point -->
+    <path d="M 256 380
+             C 200 340, 160 310, 160 260
+             C 160 220, 190 190, 220 190
+             C 240 190, 256 205, 256 205
+             C 256 205, 272 190, 292 190
+             C 322 190, 352 220, 352 260
+             C 352 310, 312 340, 256 380 Z"/>
+  </g>
+</svg>
