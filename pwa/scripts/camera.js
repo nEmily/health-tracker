@@ -22,6 +22,7 @@ const Camera = {
 
         try {
           const compressed = await Camera.compress(file, preset);
+          compressed.takenAt = file.lastModified ? new Date(file.lastModified).toISOString() : null;
           resolve(compressed);
         } catch (err) {
           console.error('Photo compression failed:', err);
@@ -49,6 +50,7 @@ const Camera = {
 
         try {
           const compressed = await Camera.compress(file, preset);
+          compressed.takenAt = file.lastModified ? new Date(file.lastModified).toISOString() : null;
           resolve(compressed);
         } catch (err) {
           console.error('Photo compression failed:', err);

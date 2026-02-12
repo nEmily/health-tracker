@@ -461,7 +461,7 @@ const Log = {
       type: Log.selectedType,
       subtype: Log.selectedSubtype || null,
       date: App.selectedDate,
-      timestamp: new Date().toISOString(),
+      timestamp: Log.pendingPhoto?.takenAt || new Date().toISOString(),
       notes,
       photo: Log.pendingPhoto ? true : null,
       duration_minutes: null,
@@ -500,7 +500,7 @@ const Log = {
 
     const notes = document.getElementById('log-notes')?.value?.trim() || '';
     const date = App.selectedDate;
-    const timestamp = new Date().toISOString();
+    const timestamp = facePhoto?.takenAt || bodyPhoto?.takenAt || new Date().toISOString();
 
     try {
       // Save face photo as its own entry
