@@ -1,6 +1,14 @@
 // ui.js — Shared UI utilities
 
 const UI = {
+  // --- Smart Defaults ---
+  autoMealSubtype() {
+    const hour = new Date().getHours();
+    if (hour < 11) return 'breakfast';
+    if (hour < 16) return 'lunch';
+    return 'dinner';
+  },
+
   // --- Date Helpers ---
   today() {
     const d = new Date();

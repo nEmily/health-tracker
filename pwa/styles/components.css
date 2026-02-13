@@ -1,3 +1,56 @@
+/* Quick Actions */
+.quick-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.quick-actions::-webkit-scrollbar { display: none; }
+
+.quick-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.quick-action:active {
+  transform: scale(0.95);
+  background: var(--bg-hover);
+}
+
+.quick-action-primary {
+  background: var(--accent-green);
+  color: var(--bg-primary);
+  border-color: var(--accent-green);
+  font-weight: 600;
+}
+
+.quick-action-primary:active {
+  background: #22c55e;
+}
+
+.quick-action-water {
+  border-color: var(--accent-blue-dim);
+  color: var(--accent-blue);
+}
+
 /* Cards */
 .card {
   background: var(--bg-card);
@@ -474,6 +527,20 @@ input[type="range"]::-webkit-slider-thumb {
 .duration-input .unit-label {
   color: var(--text-secondary);
   font-size: var(--text-sm);
+}
+
+/* Quick-log modal photo */
+.ql-photo-preview {
+  margin-bottom: var(--space-md);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.ql-photo-preview img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  display: block;
 }
 
 /* Photo Actions */

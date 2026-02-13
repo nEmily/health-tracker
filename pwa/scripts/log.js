@@ -156,12 +156,17 @@ const Log = {
   // --- Meal Form ---
   buildMealForm() {
     const frag = document.createDocumentFragment();
+    const autoSub = UI.autoMealSubtype();
 
-    // Subtype selector
+    // Subtype selector (auto-select by time of day)
     const subtypeRow = UI.createElement('div', 'subtype-row');
     ['breakfast', 'lunch', 'dinner'].forEach(sub => {
       const chip = UI.createElement('button', 'subtype-chip');
       chip.textContent = sub.charAt(0).toUpperCase() + sub.slice(1);
+      if (sub === autoSub) {
+        chip.classList.add('selected');
+        Log.selectedSubtype = sub;
+      }
       chip.addEventListener('click', () => {
         Log.selectedSubtype = sub;
         subtypeRow.querySelectorAll('.subtype-chip').forEach(c => c.classList.remove('selected'));
@@ -418,7 +423,7 @@ const Log = {
       const minus = document.getElementById('weight-minus');
       const plus = document.getElementById('weight-plus');
       if (minus) minus.addEventListener('click', () => {
-        input.value = (parseFloat(input.value || 0) - 0.1).toFixed(1);
+        input.value = Math.max(0, parseFloat(input.value || 0) - 0.1).toFixed(1);
       });
       if (plus) plus.addEventListener('click', () => {
         input.value = (parseFloat(input.value || 0) + 0.1).toFixed(1);
@@ -441,10 +446,18 @@ const Log = {
   buildSaveButton() {
     const group = UI.createElement('div', 'form-group');
     group.style.marginTop = 'var(--space-md)';
+
     const btn = UI.createElement('button', 'btn btn-primary btn-block btn-lg');
     btn.textContent = 'Save Entry';
     btn.addEventListener('click', () => Log.saveEntry());
     group.appendChild(btn);
+
+    const btn2 = UI.createElement('button', 'btn btn-ghost btn-block');
+    btn2.textContent = 'Save & Log Another';
+    btn2.style.marginTop = 'var(--space-sm)';
+    btn2.addEventListener('click', () => Log.saveEntry(true));
+    group.appendChild(btn2);
+
     return group;
   },
 
@@ -456,7 +469,7 @@ const Log = {
   },
 
   // --- Save Handlers ---
-  async saveEntry() {
+  async saveEntry(stayOnLog = false) {
     if (!Log.selectedType) return;
 
     if (Log.selectedType === 'meal' && !Log.selectedSubtype) {
@@ -491,8 +504,16 @@ const Log = {
       await DB.addEntry(entry, photoBlob);
       UI.toast(`${UI.entryLabel(entry.type, entry.subtype)} logged`);
       Log.pendingPhoto = null; // Don't revoke — blob is now in DB
-      Log.init();
-      window.location.hash = '';
+
+      if (stayOnLog) {
+        // Reset form but stay on log screen with same type selected
+        const prevType = Log.selectedType;
+        Log.init();
+        Log.selectType(prevType);
+      } else {
+        Log.init();
+        window.location.hash = '';
+      }
     } catch (err) {
       console.error('Save failed:', err);
       UI.toast('Failed to save', 'error');

@@ -1,5 +1,216 @@
 // app.js — Routing, init, navigation
 
+// --- Quick Log (zero-friction logging from Today screen) ---
+const QuickLog = {
+  init() {
+    document.getElementById('quick-photo-btn')?.addEventListener('click', () => QuickLog.snapMeal());
+    document.getElementById('quick-water-8')?.addEventListener('click', () => QuickLog.addWater(8));
+    document.getElementById('quick-water-16')?.addEventListener('click', () => QuickLog.addWater(16));
+    document.getElementById('quick-weight-btn')?.addEventListener('click', () => QuickLog.showWeightEntry());
+  },
+
+  // --- Snap meal → quick log modal (always logs to today) ---
+  async snapMeal() {
+    const photo = await Camera.capture('meal');
+    if (!photo) return;
+    QuickLog.showQuickLogModal(photo);
+  },
+
+  showQuickLogModal(photo) {
+    const autoSub = UI.autoMealSubtype();
+    let selectedType = 'meal';
+    let selectedSubtype = autoSub;
+
+    const overlay = UI.createElement('div', 'modal-overlay');
+
+    const sheet = UI.createElement('div', 'modal-sheet');
+    sheet.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">Quick Log</span>
+        <button class="modal-close" id="ql-close">&times;</button>
+      </div>
+      <div class="ql-photo-preview">
+        <img src="${photo.url}" alt="">
+      </div>
+      <div class="subtype-row" id="ql-type-chips">
+        <button class="subtype-chip selected" data-type="meal">\u{1F37D}\uFE0F Meal</button>
+        <button class="subtype-chip" data-type="snack">\u{1F36A} Snack</button>
+        <button class="subtype-chip" data-type="drink">\u{1F964} Drink</button>
+      </div>
+      <div class="subtype-row" id="ql-subtype-chips">
+        <button class="subtype-chip${autoSub === 'breakfast' ? ' selected' : ''}" data-sub="breakfast">Breakfast</button>
+        <button class="subtype-chip${autoSub === 'lunch' ? ' selected' : ''}" data-sub="lunch">Lunch</button>
+        <button class="subtype-chip${autoSub === 'dinner' ? ' selected' : ''}" data-sub="dinner">Dinner</button>
+      </div>
+      <div class="form-group">
+        <textarea class="form-input" id="ql-notes" placeholder="Add notes (optional)" rows="2"></textarea>
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" id="ql-save">Save</button>
+    `;
+
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    // Type chip selection
+    sheet.querySelectorAll('#ql-type-chips .subtype-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        sheet.querySelectorAll('#ql-type-chips .subtype-chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        selectedType = chip.dataset.type;
+        const subtypeRow = document.getElementById('ql-subtype-chips');
+        subtypeRow.style.display = selectedType === 'meal' ? 'flex' : 'none';
+        if (selectedType !== 'meal') selectedSubtype = null;
+      });
+    });
+
+    // Subtype chip selection
+    sheet.querySelectorAll('#ql-subtype-chips .subtype-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        sheet.querySelectorAll('#ql-subtype-chips .subtype-chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        selectedSubtype = chip.dataset.sub;
+      });
+    });
+
+    const closeModal = () => {
+      Camera.revokeURL(photo.url);
+      overlay.remove();
+    };
+
+    document.getElementById('ql-close').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+    // Save
+    document.getElementById('ql-save').addEventListener('click', async () => {
+      if (selectedType === 'meal' && !selectedSubtype) {
+        UI.toast('Pick a meal type', 'error');
+        return;
+      }
+
+      const notes = document.getElementById('ql-notes')?.value?.trim() || '';
+      const today = UI.today();
+      const entry = {
+        id: UI.generateId(selectedType),
+        type: selectedType,
+        subtype: selectedSubtype,
+        date: today,
+        timestamp: new Date().toISOString(),
+        notes,
+        photo: true,
+        duration_minutes: null,
+      };
+
+      const saveBtn = document.getElementById('ql-save');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+
+      try {
+        await DB.addEntry(entry, photo.blob);
+        UI.toast(`${UI.entryLabel(entry.type, entry.subtype)} logged`);
+        overlay.remove(); // Don't revoke — blob is in DB now
+        // If viewing today, refresh; otherwise switch to today
+        if (App.selectedDate !== today) {
+          App.selectedDate = today;
+          App.updateHeaderDate();
+        }
+        App.loadDayView();
+      } catch (err) {
+        console.error('Quick save failed:', err);
+        UI.toast('Failed to save', 'error');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+  },
+
+  // --- Quick water increment (always logs to today) ---
+  _waterBusy: false,
+  async addWater(oz) {
+    if (QuickLog._waterBusy) return;
+    QuickLog._waterBusy = true;
+    try {
+      const today = UI.today();
+      const summary = await DB.getDailySummary(today);
+      const current = summary.water_oz || 0;
+      const newTotal = current + oz;
+      await DB.updateDailySummary(today, { water_oz: newTotal });
+      UI.toast(`Water: ${newTotal} oz (+${oz})`);
+      if (App.selectedDate === today) App.loadDayView();
+    } catch (err) {
+      console.error('Quick water failed:', err);
+      UI.toast('Failed to save water', 'error');
+    } finally {
+      QuickLog._waterBusy = false;
+    }
+  },
+
+  // --- Quick weight modal (always logs to today) ---
+  showWeightEntry() {
+    const overlay = UI.createElement('div', 'modal-overlay');
+    const today = UI.today();
+
+    const sheet = UI.createElement('div', 'modal-sheet');
+    sheet.style.maxHeight = '50dvh';
+    sheet.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">Log Weight</span>
+        <button class="modal-close" id="qw-close">&times;</button>
+      </div>
+      <div class="form-group">
+        <div class="number-input" style="justify-content:center;">
+          <button class="btn btn-secondary" id="qw-minus">\u2212</button>
+          <input type="number" class="form-input" id="qw-weight" placeholder="135.0" step="0.1" inputmode="decimal">
+          <button class="btn btn-secondary" id="qw-plus">+</button>
+        </div>
+        <div style="text-align:center; color:var(--text-muted); font-size:var(--text-sm); margin-top:var(--space-xs);">lbs</div>
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" id="qw-save">Save Weight</button>
+    `;
+
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    // Pre-fill current weight and auto-focus
+    DB.getDailySummary(today).then(summary => {
+      const input = document.getElementById('qw-weight');
+      if (summary.weight) input.value = summary.weight.value;
+      input.focus();
+    }).catch(() => {});
+
+    // +/- buttons (prevent going below 0)
+    document.getElementById('qw-minus')?.addEventListener('click', () => {
+      const input = document.getElementById('qw-weight');
+      input.value = Math.max(0, parseFloat(input.value || 0) - 0.1).toFixed(1);
+    });
+    document.getElementById('qw-plus')?.addEventListener('click', () => {
+      const input = document.getElementById('qw-weight');
+      input.value = (parseFloat(input.value || 0) + 0.1).toFixed(1);
+    });
+
+    const closeModal = () => overlay.remove();
+    document.getElementById('qw-close').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+    // Save
+    document.getElementById('qw-save').addEventListener('click', async () => {
+      const value = parseFloat(document.getElementById('qw-weight')?.value);
+      if (isNaN(value) || value <= 0) {
+        UI.toast('Enter a valid weight', 'error');
+        return;
+      }
+      try {
+        await DB.updateDailySummary(today, { weight: { value, unit: 'lbs' } });
+        UI.toast(`Weight: ${value} lbs saved`);
+        overlay.remove();
+        if (App.selectedDate === today) App.loadDayView();
+      } catch (err) {
+        console.error('Quick weight failed:', err);
+        UI.toast('Failed to save weight', 'error');
+      }
+    });
+  },
+};
+
 const App = {
   currentScreen: null,
   selectedDate: null,
@@ -8,6 +219,7 @@ const App = {
     App.selectedDate = UI.today();
     App.updateHeaderDate();
     App.setupNavigation();
+    QuickLog.init();
     window.addEventListener('hashchange', () => App.handleRoute());
 
     // Initialize DB, then load the initial route
@@ -104,11 +316,13 @@ const App = {
     if (exportDiv) exportDiv.style.display = entries.length > 0 ? 'block' : 'none';
 
     if (entries.length === 0) {
-      const dateLabel = date === UI.today() ? 'today' : `for ${UI.formatDate(date)}`;
+      const isToday = date === UI.today();
+      const dateLabel = isToday ? 'today' : `for ${UI.formatDate(date)}`;
+      const hint = isToday ? 'Use the quick actions above to start logging.' : '';
       entryList.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">\u{1F4CB}</div>
-          <p>No entries ${dateLabel}.<br>Tap + to start logging.</p>
+          <p>No entries ${dateLabel}.${hint ? '<br>' + hint : ''}</p>
         </div>
       `;
     } else {
