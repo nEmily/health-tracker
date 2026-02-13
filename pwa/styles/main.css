@@ -68,6 +68,27 @@ body {
   font-weight: 600;
 }
 
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.header-nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--text-xl);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1;
+}
+
+.header-nav-btn:active {
+  color: var(--accent-green);
+}
+
 .header-date {
   font-size: var(--text-sm);
   color: var(--text-secondary);

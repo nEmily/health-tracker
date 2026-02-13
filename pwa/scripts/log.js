@@ -469,8 +469,9 @@ const Log = {
   },
 
   // --- Save Handlers ---
+  _saveBusy: false,
   async saveEntry(stayOnLog = false) {
-    if (!Log.selectedType) return;
+    if (!Log.selectedType || Log._saveBusy) return;
 
     if (Log.selectedType === 'meal' && !Log.selectedSubtype) {
       UI.toast('Pick a meal type', 'error');
@@ -499,6 +500,7 @@ const Log = {
       }
     }
 
+    Log._saveBusy = true;
     try {
       const photoBlob = Log.pendingPhoto ? Log.pendingPhoto.blob : null;
       await DB.addEntry(entry, photoBlob);
@@ -517,6 +519,8 @@ const Log = {
     } catch (err) {
       console.error('Save failed:', err);
       UI.toast('Failed to save', 'error');
+    } finally {
+      Log._saveBusy = false;
     }
   },
 

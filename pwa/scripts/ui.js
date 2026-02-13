@@ -143,6 +143,28 @@ const UI = {
 
     body.appendChild(typeLabel);
 
+    // Delete button (hidden until entry is tapped)
+    const deleteBtn = UI.createElement('button', 'entry-delete-btn');
+    deleteBtn.innerHTML = '&times;';
+    deleteBtn.title = 'Delete entry';
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete this ${UI.entryLabel(entry.type, entry.subtype).toLowerCase()} entry?`)) return;
+      try {
+        await DB.deleteEntry(entry.id);
+        UI.toast('Entry deleted');
+        App.loadDayView();
+      } catch (err) {
+        console.error('Delete failed:', err);
+        UI.toast('Failed to delete', 'error');
+      }
+    });
+
+    // Tap entry to toggle delete button visibility
+    div.addEventListener('click', () => {
+      div.classList.toggle('show-delete');
+    });
+
     if (entry.notes) {
       const notes = UI.createElement('div', 'entry-notes');
       notes.textContent = entry.notes;
@@ -162,6 +184,7 @@ const UI = {
 
     div.appendChild(icon);
     div.appendChild(body);
+    div.appendChild(deleteBtn);
 
     // Load photo thumbnail if entry has a photo
     if (entry.photo) {

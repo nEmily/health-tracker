@@ -297,6 +297,28 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: var(--space-xs);
 }
 
+/* Entry delete button — visible on tap */
+.entry-delete-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 50%;
+  background: var(--accent-red-dim);
+  color: var(--accent-red);
+  border: none;
+  font-size: var(--text-lg);
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.entry-item.show-delete .entry-delete-btn {
+  display: flex;
+}
+
 .entry-photo-thumb {
   width: 48px;
   height: 48px;
@@ -487,7 +509,13 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-muted);
   font-size: var(--text-xl);
   cursor: pointer;
-  padding: var(--space-xs);
+  padding: var(--space-sm);
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Number input with +/- */

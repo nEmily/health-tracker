@@ -19,7 +19,11 @@
     <!-- Header -->
     <header class="app-header">
       <h1>Health Tracker</h1>
-      <span class="header-date">Today</span>
+      <div class="header-nav">
+        <button class="header-nav-btn" id="header-prev" aria-label="Previous day">&lsaquo;</button>
+        <span class="header-date">Today</span>
+        <button class="header-nav-btn" id="header-next" aria-label="Next day">&rsaquo;</button>
+      </div>
     </header>
 
     <!-- Screen: Today (Day View) -->
@@ -54,7 +58,7 @@
 
       <div id="today-export" style="margin-top: var(--space-lg); display: none;">
         <button class="btn btn-secondary btn-block" id="today-export-btn" onclick="Sync.exportDay()">
-          Export Today's Data
+          Export This Day
         </button>
       </div>
 

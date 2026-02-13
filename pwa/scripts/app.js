@@ -219,6 +219,7 @@ const App = {
     App.selectedDate = UI.today();
     App.updateHeaderDate();
     App.setupNavigation();
+    App.setupDateNav();
     QuickLog.init();
     window.addEventListener('hashchange', () => App.handleRoute());
 
@@ -293,10 +294,30 @@ const App = {
     });
   },
 
+  // --- Date Navigation ---
+  setupDateNav() {
+    document.getElementById('header-prev')?.addEventListener('click', () => App.navigateDay(-1));
+    document.getElementById('header-next')?.addEventListener('click', () => App.navigateDay(1));
+  },
+
+  navigateDay(offset) {
+    const d = new Date(App.selectedDate + 'T12:00:00');
+    d.setDate(d.getDate() + offset);
+    const newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // Don't navigate into the future
+    if (newDate > UI.today()) return;
+    App.selectedDate = newDate;
+    App.updateHeaderDate();
+    if (App.currentScreen === 'today') App.loadDayView();
+  },
+
   // --- Header ---
   updateHeaderDate() {
     const el = document.querySelector('.header-date');
     if (el) el.textContent = UI.formatRelativeDate(App.selectedDate);
+    // Hide next button if already on today
+    const nextBtn = document.getElementById('header-next');
+    if (nextBtn) nextBtn.style.visibility = App.selectedDate >= UI.today() ? 'hidden' : 'visible';
   },
 
   // --- Today/Day View ---
