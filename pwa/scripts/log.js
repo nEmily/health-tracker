@@ -448,6 +448,13 @@ const Log = {
     return group;
   },
 
+  // Use photo timestamp only if it falls on the selected date; otherwise use now
+  _getEntryTimestamp() {
+    const takenAt = Log.pendingPhoto?.takenAt;
+    if (takenAt && takenAt.startsWith(App.selectedDate)) return takenAt;
+    return new Date().toISOString();
+  },
+
   // --- Save Handlers ---
   async saveEntry() {
     if (!Log.selectedType) return;
@@ -464,7 +471,7 @@ const Log = {
       type: Log.selectedType,
       subtype: Log.selectedSubtype || null,
       date: App.selectedDate,
-      timestamp: Log.pendingPhoto?.takenAt || new Date().toISOString(),
+      timestamp: Log._getEntryTimestamp(),
       notes,
       photo: Log.pendingPhoto ? true : null,
       duration_minutes: null,
@@ -503,7 +510,8 @@ const Log = {
 
     const notes = document.getElementById('log-notes')?.value?.trim() || '';
     const date = App.selectedDate;
-    const timestamp = facePhoto?.takenAt || bodyPhoto?.takenAt || new Date().toISOString();
+    const candidateTs = facePhoto?.takenAt || bodyPhoto?.takenAt;
+    const timestamp = (candidateTs && candidateTs.startsWith(App.selectedDate)) ? candidateTs : new Date().toISOString();
 
     try {
       // Save face photo as its own entry

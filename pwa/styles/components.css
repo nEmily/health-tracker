@@ -73,6 +73,10 @@
   gap: var(--space-sm);
 }
 
+.type-grid .type-btn:last-child:nth-child(3n+1) {
+  grid-column: 2;
+}
+
 .type-btn {
   display: flex;
   flex-direction: column;

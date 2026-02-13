@@ -66,7 +66,17 @@ const App = {
       item.addEventListener('click', (e) => {
         e.preventDefault();
         const screen = item.dataset.screen;
-        window.location.hash = screen === 'today' ? '' : screen;
+        if (screen === 'today') {
+          App.selectedDate = UI.today();
+          App.updateHeaderDate();
+          if (window.location.hash === '' || window.location.hash === '#today') {
+            App.showScreen('today');
+          } else {
+            window.location.hash = '';
+          }
+        } else {
+          window.location.hash = screen;
+        }
       });
     });
   },

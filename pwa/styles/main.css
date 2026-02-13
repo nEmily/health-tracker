@@ -36,7 +36,7 @@ body {
   display: none;
   flex: 1;
   padding: var(--space-md);
-  padding-bottom: calc(var(--nav-height) + var(--space-lg));
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-lg));
   animation: fadeIn var(--transition-base);
 }
 
@@ -86,7 +86,7 @@ body {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  height: var(--nav-height);
+  height: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 200;
 }

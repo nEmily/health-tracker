@@ -3,7 +3,8 @@
 const UI = {
   // --- Date Helpers ---
   today() {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   },
 
   formatDate(dateStr) {
@@ -19,9 +20,10 @@ const UI = {
   formatRelativeDate(dateStr) {
     const today = UI.today();
     if (dateStr === today) return 'Today';
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+    if (dateStr === yesterday) return 'Yesterday';
     return UI.formatDate(dateStr);
   },
 
