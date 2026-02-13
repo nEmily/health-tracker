@@ -90,6 +90,12 @@
       <h2 class="section-header">Settings</h2>
 
       <div class="card" style="margin-top: var(--space-sm);">
+        <h3 style="font-size: var(--text-base); margin-bottom: var(--space-sm);">Goals</h3>
+        <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-sm);">Set your daily calorie, protein, and water targets.</p>
+        <button class="btn btn-secondary btn-block" onclick="App.showGoalSetup()">Edit Goals</button>
+      </div>
+
+      <div class="card" style="margin-top: var(--space-sm);">
         <h3 style="font-size: var(--text-base); margin-bottom: var(--space-sm);">Sync</h3>
         <button class="btn btn-primary btn-block" onclick="Sync.exportDay()">Export Today's Data</button>
         <button class="btn btn-secondary btn-block" style="margin-top: var(--space-sm);" onclick="Sync.importAll()">Import (select all files at once)</button>

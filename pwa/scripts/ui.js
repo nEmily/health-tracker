@@ -51,6 +51,11 @@ const UI = {
       document.body.appendChild(container);
     }
 
+    // Limit to 3 visible toasts — remove oldest
+    while (container.children.length >= 3) {
+      container.firstChild.remove();
+    }
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
@@ -58,7 +63,12 @@ const UI = {
 
     setTimeout(() => {
       toast.classList.add('leaving');
-      toast.addEventListener('animationend', () => toast.remove());
+      // Fallback removal if animationend doesn't fire (backgrounded tab, iOS quirks)
+      const fallback = setTimeout(() => toast.remove(), 500);
+      toast.addEventListener('animationend', () => {
+        clearTimeout(fallback);
+        toast.remove();
+      });
     }, duration);
   },
 

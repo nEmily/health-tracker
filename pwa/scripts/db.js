@@ -143,6 +143,16 @@ async function getEntriesByType(type, startDate, endDate) {
   });
 }
 
+async function hasAnyEntries() {
+  const db = await openDB();
+  const tx = db.transaction('entries', 'readonly');
+  const request = tx.objectStore('entries').openCursor();
+  return new Promise((resolve) => {
+    request.onsuccess = (e) => resolve(!!e.target.result);
+    request.onerror = () => resolve(false);
+  });
+}
+
 async function deleteEntry(id) {
   const db = await openDB();
   const tx = db.transaction(['entries', 'photos'], 'readwrite');
@@ -417,6 +427,7 @@ window.DB = {
   getEntriesByDate,
   getEntriesByDateRange,
   getEntriesByType,
+  hasAnyEntries,
   deleteEntry,
   getDailySummary,
   updateDailySummary,

@@ -317,14 +317,20 @@ const App = {
 
     if (entries.length === 0) {
       const isToday = date === UI.today();
-      const dateLabel = isToday ? 'today' : `for ${UI.formatDate(date)}`;
-      const hint = isToday ? 'Use the quick actions above to start logging.' : '';
-      entryList.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">\u{1F4CB}</div>
-          <p>No entries ${dateLabel}.${hint ? '<br>' + hint : ''}</p>
-        </div>
-      `;
+      // Check if this is a brand new user (no entries anywhere)
+      const hasAnyEntries = isToday ? await DB.hasAnyEntries() : true;
+      if (isToday && !hasAnyEntries) {
+        entryList.innerHTML = App.renderWelcomeCard();
+      } else {
+        const dateLabel = isToday ? 'today' : `for ${UI.formatDate(date)}`;
+        const hint = isToday ? 'Use the quick actions above to start logging.' : '';
+        entryList.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">\u{1F4CB}</div>
+            <p>No entries ${dateLabel}.${hint ? '<br>' + hint : ''}</p>
+          </div>
+        `;
+      }
     } else {
       // Sort by timestamp
       entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -349,6 +355,73 @@ const App = {
         analysisEl.innerHTML = '';
       }
     }
+  },
+
+  renderWelcomeCard() {
+    return `
+      <div class="card" style="text-align:center; padding: var(--space-lg);">
+        <div style="font-size: 40px; margin-bottom: var(--space-md);">\u{1F44B}</div>
+        <h2 style="font-size: var(--text-lg); margin-bottom: var(--space-sm);">Welcome to Health Tracker</h2>
+        <p style="color: var(--text-secondary); font-size: var(--text-sm); margin-bottom: var(--space-lg); line-height: 1.6;">
+          Log meals, water, workouts, and weight throughout the day.<br>
+          Snap photos of your food and Claude will analyze everything nightly.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+          <button class="btn btn-primary btn-block btn-lg" onclick="App.showGoalSetup()">Set Your Goals</button>
+          <button class="btn btn-secondary btn-block" onclick="window.location.hash='log'">Start Logging</button>
+        </div>
+        <p style="color: var(--text-muted); font-size: var(--text-xs); margin-top: var(--space-lg);">
+          At the end of each day, export your data from Settings to sync with iCloud Drive.
+        </p>
+      </div>
+    `;
+  },
+
+  async showGoalSetup() {
+    const overlay = UI.createElement('div', 'modal-overlay');
+
+    // Load existing goals
+    const goals = await DB.getProfile('goals') || {};
+
+    const sheet = UI.createElement('div', 'modal-sheet');
+    sheet.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">Set Your Goals</span>
+        <button class="modal-close" id="gs-close">&times;</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Daily Calories</label>
+        <input type="number" class="form-input" id="gs-calories" value="${UI.escapeHtml(String(goals.calories || ''))}" placeholder="1800" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Protein Goal (grams)</label>
+        <input type="number" class="form-input" id="gs-protein" value="${UI.escapeHtml(String(goals.protein || ''))}" placeholder="130" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Water Goal (oz)</label>
+        <input type="number" class="form-input" id="gs-water" value="${UI.escapeHtml(String(goals.water_oz || ''))}" placeholder="96" inputmode="numeric">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" id="gs-save">Save Goals</button>
+    `;
+
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    const closeModal = () => overlay.remove();
+    document.getElementById('gs-close').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+    document.getElementById('gs-save').addEventListener('click', async () => {
+      const calories = parseInt(document.getElementById('gs-calories')?.value) || null;
+      const protein = parseInt(document.getElementById('gs-protein')?.value) || null;
+      const water_oz = parseInt(document.getElementById('gs-water')?.value) || null;
+
+      const newGoals = { calories, protein, water_oz };
+      await DB.setProfile('goals', newGoals);
+      UI.toast('Goals saved');
+      overlay.remove();
+      App.loadDayView();
+    });
   },
 
   renderDayStats(summary, entries) {
