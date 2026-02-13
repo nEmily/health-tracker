@@ -81,6 +81,12 @@ const UI = {
     return labels[type] || type;
   },
 
+  // --- Text Escaping ---
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  },
+
   // --- DOM Helpers ---
   $(selector) {
     return document.querySelector(selector);
@@ -98,6 +104,8 @@ const UI = {
   },
 
   clearChildren(el) {
+    // Revoke any object URLs in child images to prevent memory leaks
+    el.querySelectorAll?.('img[src^="blob:"]')?.forEach(img => URL.revokeObjectURL(img.src));
     while (el.firstChild) el.removeChild(el.firstChild);
   },
 

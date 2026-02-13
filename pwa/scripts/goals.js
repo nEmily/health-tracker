@@ -147,13 +147,13 @@ const GoalsView = {
       if (a.highlights?.length) {
         html += `<div style="margin-bottom: var(--space-sm);">`;
         for (const h of a.highlights) {
-          html += `<div style="font-size:var(--text-sm); color:var(--accent-green); margin-bottom:2px;">\u2713 ${h}</div>`;
+          html += `<div style="font-size:var(--text-sm); color:var(--accent-green); margin-bottom:2px;">\u2713 ${UI.escapeHtml(h)}</div>`;
         }
         html += '</div>';
       }
       if (a.concerns?.length) {
         for (const c of a.concerns) {
-          html += `<div style="font-size:var(--text-sm); color:var(--accent-orange); margin-bottom:2px;">\u26A0 ${c}</div>`;
+          html += `<div style="font-size:var(--text-sm); color:var(--accent-orange); margin-bottom:2px;">\u26A0 ${UI.escapeHtml(c)}</div>`;
         }
       }
       html += '</div>';
@@ -208,8 +208,8 @@ const GoalsView = {
         const rm = day.remaining_meal;
         html += `
           <div style="font-size:var(--text-sm); padding: 4px 0;">
-            <div style="font-weight:500; margin-bottom:2px;">${rm.name || rm.suggestion || 'Suggestion'}</div>
-            ${rm.note ? `<div style="color:var(--text-muted); font-size:var(--text-xs); margin-bottom:4px;">${rm.note}</div>` : ''}
+            <div style="font-weight:500; margin-bottom:2px;">${UI.escapeHtml(rm.name || rm.suggestion || 'Suggestion')}</div>
+            ${rm.note ? `<div style="color:var(--text-muted); font-size:var(--text-xs); margin-bottom:4px;">${UI.escapeHtml(rm.note)}</div>` : ''}
             <span style="color:var(--text-muted);">${rm.calories || rm.approxCalories || '?'} cal, ${rm.protein || '?'}g protein</span>
           </div>
         `;
@@ -218,8 +218,8 @@ const GoalsView = {
       // Handle meals array
       if (day.meals) {
         for (const meal of day.meals) {
-          const mealType = meal.type || meal.meal || '';
-          const mealName = meal.suggestion || meal.name || meal.description || '';
+          const mealType = UI.escapeHtml(meal.type || meal.meal || '');
+          const mealName = UI.escapeHtml(meal.suggestion || meal.name || meal.description || '');
           const mealCal = meal.approxCalories || meal.calories || '?';
           html += `
             <div style="display:flex; justify-content:space-between; font-size:var(--text-sm); margin-bottom:var(--space-xs); padding: 4px 0; border-bottom: 1px solid var(--border-color);">
@@ -253,7 +253,8 @@ const GoalsView = {
 
     if (regimen.weeklySchedule) {
       html += '<div class="card">';
-      const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      const selectedDay = new Date(App.selectedDate + 'T12:00:00');
+      const today = selectedDay.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
 
       for (const day of regimen.weeklySchedule) {
         const isToday = day.day === today;

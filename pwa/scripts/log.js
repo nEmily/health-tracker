@@ -54,6 +54,9 @@ const Log = {
     Log.selectedType = type;
     Log.selectedSubtype = null;
     Log.clearPendingPhoto();
+    // Also clear body photo previews
+    if (Log._pendingFacePhoto) { Camera.revokeURL(Log._pendingFacePhoto.url); Log._pendingFacePhoto = null; }
+    if (Log._pendingBodyPhoto) { Camera.revokeURL(Log._pendingBodyPhoto.url); Log._pendingBodyPhoto = null; }
 
     // Highlight selected
     document.querySelectorAll('.type-btn').forEach(btn => {

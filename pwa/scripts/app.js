@@ -176,6 +176,7 @@ const Settings = {
   },
 
   async clearPhotos() {
+    if (!confirm('Delete all processed meal photos? Body photos are kept.')) return;
     await Sync.clearProcessedPhotos();
     Settings.loadStorageInfo();
   },

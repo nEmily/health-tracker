@@ -41,6 +41,7 @@ const Sync = {
         });
         UI.toast('Exported! Save to iCloud Drive.');
         await Sync.markPhotosSynced(date);
+        Settings?.loadStorageInfo?.();
         return;
       } catch (err) {
         if (err.name === 'AbortError') return; // User cancelled
@@ -57,6 +58,7 @@ const Sync = {
     URL.revokeObjectURL(url);
     UI.toast('Downloaded! Move to iCloud Drive.');
     await Sync.markPhotosSynced(date);
+    Settings?.loadStorageInfo?.();
   },
 
   async markPhotosSynced(dateStr) {
