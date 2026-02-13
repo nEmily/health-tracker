@@ -111,11 +111,12 @@ const Sync = {
       const text = await file.text();
       const data = JSON.parse(text);
 
-      if (!data.generatedDate || !data.days) {
+      if (!data.days || (!data.generatedDate && !data.generated)) {
         UI.toast('Invalid meal plan file', 'error');
         return;
       }
 
+      if (!data.generatedDate) data.generatedDate = data.generated;
       await DB.saveMealPlan(data);
       UI.toast('Meal plan imported');
     } catch (err) {
@@ -199,35 +200,49 @@ const Sync = {
     }
   },
 
-  // --- Smart Import (auto-detects JSON vs ZIP) ---
-  async smartImport() {
-    const file = await Sync.pickFile('.json,.zip');
-    if (!file) return;
+  // --- Import All (multi-file, auto-detects type) ---
+  async importAll() {
+    const files = await Sync.pickFiles('.json,.zip');
+    if (!files || files.length === 0) return;
 
-    if (file.name.endsWith('.zip')) {
-      // Treat as backup ZIP
-      UI.toast('Restoring from backup...');
-      // Re-use the file by wrapping restoreFromZip logic
-      const arrayBuf = await file.arrayBuffer();
-      await Sync.restoreFromZipData(new Uint8Array(arrayBuf));
-    } else {
-      // Treat as JSON — could be analysis or meal plan
-      const text = await file.text();
-      const data = JSON.parse(text);
+    let analysisCount = 0, mealPlanCount = 0, zipCount = 0, errors = 0;
 
-      if (data.date && data.entries) {
-        // It's an analysis summary
-        await DB.importAnalysis(data.date, data);
-        UI.toast(`Imported analysis for ${UI.formatDate(data.date)}`);
-        if (data.date === App.selectedDate) App.loadDayView();
-      } else if (data.generated && data.days) {
-        // It's a meal plan
-        await DB.saveMealPlan({ ...data, generatedDate: data.generated });
-        UI.toast('Meal plan imported');
-      } else {
-        UI.toast('Unrecognized file format', 'error');
+    for (const file of files) {
+      try {
+        if (file.name.endsWith('.zip')) {
+          const arrayBuf = await file.arrayBuffer();
+          await Sync.restoreFromZipData(new Uint8Array(arrayBuf));
+          zipCount++;
+        } else {
+          const text = await file.text();
+          const data = JSON.parse(text);
+
+          if (data.date && data.entries) {
+            await DB.importAnalysis(data.date, data);
+            analysisCount++;
+          } else if (data.days && (data.generated || data.generatedDate)) {
+            if (!data.generatedDate) data.generatedDate = data.generated;
+            await DB.saveMealPlan(data);
+            mealPlanCount++;
+          } else {
+            console.warn('Skipped unrecognized file:', file.name);
+            errors++;
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to import ${file.name}:`, err);
+        errors++;
       }
     }
+
+    const parts = [];
+    if (analysisCount) parts.push(`${analysisCount} analysis`);
+    if (mealPlanCount) parts.push(`${mealPlanCount} meal plan`);
+    if (zipCount) parts.push(`${zipCount} backup`);
+    if (errors) parts.push(`${errors} skipped`);
+    UI.toast(parts.length ? `Imported: ${parts.join(', ')}` : 'No files imported', parts.length ? 'success' : 'error');
+
+    App.loadDayView();
   },
 
   async restoreFromZipData(zipBytes) {
@@ -310,13 +325,25 @@ const Sync = {
     return files;
   },
 
-  // --- File Picker Helper ---
+  // --- File Picker Helpers ---
   pickFile(accept) {
     return new Promise((resolve) => {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = accept || '*';
       input.addEventListener('change', () => resolve(input.files[0] || null));
+      input.addEventListener('cancel', () => resolve(null));
+      input.click();
+    });
+  },
+
+  pickFiles(accept) {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = accept || '*';
+      input.multiple = true;
+      input.addEventListener('change', () => resolve(Array.from(input.files)));
       input.addEventListener('cancel', () => resolve(null));
       input.click();
     });
