@@ -94,10 +94,11 @@ const App = {
     if (exportDiv) exportDiv.style.display = entries.length > 0 ? 'block' : 'none';
 
     if (entries.length === 0) {
+      const dateLabel = date === UI.today() ? 'today' : `for ${UI.formatDate(date)}`;
       entryList.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">\u{1F4CB}</div>
-          <p>No entries yet today.<br>Tap + to start logging.</p>
+          <p>No entries ${dateLabel}.<br>Tap + to start logging.</p>
         </div>
       `;
     } else {
@@ -117,8 +118,9 @@ const App = {
     const analysisEl = document.getElementById('today-analysis');
     if (analysisEl) {
       if (analysis) {
-        analysisEl.innerHTML = `<h2 class="section-header" style="margin-top: var(--space-lg)">Analysis</h2>` +
-          GoalsView.renderAnalysisSummary(analysis);
+        // renderAnalysisSummary already includes its own header
+        analysisEl.innerHTML = `<div style="margin-top: var(--space-lg);">` +
+          GoalsView.renderAnalysisSummary(analysis) + `</div>`;
       } else {
         analysisEl.innerHTML = '';
       }

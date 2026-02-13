@@ -131,73 +131,8 @@ const Sync = {
     if (!file) return;
 
     UI.toast('Restoring from backup...');
-
-    try {
-      const arrayBuf = await file.arrayBuffer();
-      const files = Sync.readZip(new Uint8Array(arrayBuf));
-
-      // Find log.json
-      const logFile = files.find(f => f.name.endsWith('log.json'));
-      if (!logFile) {
-        UI.toast('No log.json found in ZIP', 'error');
-        return;
-      }
-
-      const log = JSON.parse(new TextDecoder().decode(logFile.data));
-      if (!log.date || !log.entries) {
-        UI.toast('Invalid log format', 'error');
-        return;
-      }
-
-      // Build a map of photo filenames to blobs
-      const photoMap = {};
-      for (const f of files) {
-        if (f.name.endsWith('.jpg') || f.name.endsWith('.jpeg')) {
-          photoMap[f.name] = new Blob([f.data], { type: 'image/jpeg' });
-        }
-      }
-
-      // Import entries + photos
-      let imported = 0;
-      for (const entry of log.entries) {
-        // Find matching photo
-        let photoBlob = null;
-        if (entry.photo) {
-          // Check daily photos path and progress path
-          const dailyPath = `daily/${log.date}/photos/${entry.id}.jpg`;
-          const progressFace = `progress/${log.date}/face.jpg`;
-          const progressBody = `progress/${log.date}/body.jpg`;
-
-          photoBlob = photoMap[dailyPath]
-            || (entry.subtype === 'face' ? photoMap[progressFace] : null)
-            || (entry.subtype === 'body' ? photoMap[progressBody] : null);
-
-          // Also try matching by entry ID prefix in filename
-          if (!photoBlob) {
-            const match = Object.keys(photoMap).find(k => k.includes(`/${entry.id}.`) || k.includes(`/${entry.id}/`));
-            if (match) photoBlob = photoMap[match];
-          }
-        }
-
-        await DB.addEntry(entry, photoBlob);
-        imported++;
-      }
-
-      // Import daily summary (water, weight, sleep)
-      const summaryUpdates = {};
-      if (log.water_oz != null) summaryUpdates.water_oz = log.water_oz;
-      if (log.weight != null) summaryUpdates.weight = log.weight;
-      if (log.sleep != null) summaryUpdates.sleep = log.sleep;
-      if (Object.keys(summaryUpdates).length > 0) {
-        await DB.updateDailySummary(log.date, summaryUpdates);
-      }
-
-      UI.toast(`Restored ${imported} entries for ${UI.formatDate(log.date)}`);
-      if (log.date === App.selectedDate) App.loadDayView();
-    } catch (err) {
-      console.error('Restore failed:', err);
-      UI.toast('Restore failed — check ZIP format', 'error');
-    }
+    const arrayBuf = await file.arrayBuffer();
+    await Sync.restoreFromZipData(new Uint8Array(arrayBuf));
   },
 
   // --- Import All (multi-file, auto-detects type) ---

@@ -71,8 +71,13 @@ const Calendar = {
         App.selectedDate = date;
         App.updateHeaderDate();
         Calendar.render(); // Re-render to update selection
-        // Switch to today view for that date
-        window.location.hash = '';
+        // Switch to today/day view for that date
+        if (window.location.hash === '' || window.location.hash === '#today') {
+          // Hash won't change, so manually trigger the view
+          App.showScreen('today');
+        } else {
+          window.location.hash = '';
+        }
       });
     });
 
@@ -107,18 +112,29 @@ const Calendar = {
 
       if (analysis) {
         // Has analysis — check goal adherence
-        const cals = analysis.calories;
-        const macros = analysis.macros;
+        // Support both old schema (analysis.calories.intake/goal) and new (analysis.totals/goals)
+        let calIntake = null, calGoal = null, proActual = null, proGoal = null;
+        if (analysis.calories) {
+          calIntake = analysis.calories.intake; calGoal = analysis.calories.goal;
+        } else if (analysis.totals && analysis.goals?.calories) {
+          calIntake = analysis.totals.calories; calGoal = analysis.goals.calories.target;
+        }
+        if (analysis.macros?.protein) {
+          proActual = analysis.macros.protein.grams; proGoal = analysis.macros.protein.goal;
+        } else if (analysis.totals && analysis.goals?.protein) {
+          proActual = analysis.totals.protein; proGoal = analysis.goals.protein.target;
+        }
+
         let goalsHit = 0;
         let goalTotal = 0;
 
-        if (cals && cals.goal) {
+        if (calGoal) {
           goalTotal++;
-          if (Math.abs(cals.intake - cals.goal) <= cals.goal * 0.15) goalsHit++;
+          if (Math.abs(calIntake - calGoal) <= calGoal * 0.15) goalsHit++;
         }
-        if (macros?.protein?.goal) {
+        if (proGoal) {
           goalTotal++;
-          if (macros.protein.grams >= macros.protein.goal * 0.85) goalsHit++;
+          if (proActual >= proGoal * 0.85) goalsHit++;
         }
 
         if (goalTotal > 0 && goalsHit === goalTotal) {

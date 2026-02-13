@@ -372,9 +372,10 @@ async function exportDay(dateStr) {
   const entries = await getEntriesByDate(dateStr);
   const summary = await getDailySummary(dateStr);
 
-  // Collect photos
+  // Collect photos — skip body photos here (handled separately below)
   const photoFiles = [];
   for (const entry of entries) {
+    if (entry.type === 'bodyPhoto') continue;
     const photos = await getPhotos(entry.id);
     for (const photo of photos) {
       if (photo.blob) {
@@ -386,12 +387,12 @@ async function exportDay(dateStr) {
     }
   }
 
-  // Body photos
+  // Body photos — stored under progress/ path
   const bodyPhotos = await getBodyPhotos(dateStr);
   for (const bp of bodyPhotos) {
     if (bp.blob) {
       photoFiles.push({
-        name: bp.id.includes('face') ? 'body/face.jpg' : 'body/body.jpg',
+        name: bp.entryId?.includes('face') || bp.id?.includes('face') ? 'body/face.jpg' : 'body/body.jpg',
         blob: bp.blob,
       });
     }

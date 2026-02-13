@@ -42,40 +42,82 @@ const GoalsView = {
     container.innerHTML = html;
   },
 
+  // Normalize analysis data to a consistent shape for rendering.
+  // Handles both the old schema (a.calories.intake, a.macros.protein.grams) and
+  // the actual processing schema (a.totals.calories, a.goals.calories.target).
+  _normalizeAnalysis(a) {
+    let calIntake = null, calGoal = null, calBurned = null, calNet = null;
+    const macros = {}; // { protein: { actual, goal }, carbs: {...}, fat: {...} }
+    let waterActual = null, waterGoal = null;
+
+    // Calories
+    if (a.calories) {
+      calIntake = a.calories.intake; calGoal = a.calories.goal;
+      calBurned = a.calories.burned; calNet = a.calories.net;
+    } else if (a.totals && a.goals?.calories) {
+      calIntake = a.totals.calories; calGoal = a.goals.calories.target;
+    }
+
+    // Macros
+    if (a.macros) {
+      for (const [name, m] of Object.entries(a.macros)) {
+        macros[name] = { actual: m.grams, goal: m.goal };
+      }
+    } else if (a.totals) {
+      for (const name of ['protein', 'carbs', 'fat']) {
+        if (a.totals[name] != null) {
+          macros[name] = {
+            actual: a.totals[name],
+            goal: a.goals?.[name]?.target || null,
+          };
+        }
+      }
+    }
+
+    // Water
+    if (a.water) {
+      waterActual = a.water.total_oz; waterGoal = a.water.goal_oz;
+    } else if (a.goals?.water) {
+      waterActual = a.goals.water.actual_oz; waterGoal = a.goals.water.target_oz;
+    }
+
+    return { calIntake, calGoal, calBurned, calNet, macros, waterActual, waterGoal };
+  },
+
   renderAnalysisSummary(a) {
     let html = '<h2 class="section-header">Daily Summary</h2>';
+    const n = GoalsView._normalizeAnalysis(a);
 
     // Calorie bar
-    if (a.calories) {
-      const c = a.calories;
-      const pct = c.goal ? Math.min(100, Math.round((c.intake / c.goal) * 100)) : 0;
-      const overUnder = c.goal ? c.intake - c.goal : 0;
-      const color = Math.abs(overUnder) <= c.goal * 0.1 ? 'var(--accent-green)' :
+    if (n.calIntake != null) {
+      const pct = n.calGoal ? Math.min(100, Math.round((n.calIntake / n.calGoal) * 100)) : 0;
+      const overUnder = n.calGoal ? n.calIntake - n.calGoal : 0;
+      const color = n.calGoal && Math.abs(overUnder) <= n.calGoal * 0.1 ? 'var(--accent-green)' :
                     overUnder > 0 ? 'var(--accent-red)' : 'var(--accent-orange)';
 
       html += `
         <div class="card">
           <div style="display:flex; justify-content:space-between; margin-bottom: var(--space-xs);">
             <span style="font-weight:600;">Calories</span>
-            <span style="color:var(--text-secondary)">${c.intake} / ${c.goal || '?'}</span>
+            <span style="color:var(--text-secondary)">${n.calIntake} / ${n.calGoal || '?'}</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%; background:${color}"></div></div>
-          ${c.burned ? `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-top:var(--space-xs);">Burned: ${c.burned} | Net: ${c.net}</div>` : ''}
+          ${n.calBurned ? `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-top:var(--space-xs);">Burned: ${n.calBurned} | Net: ${n.calNet}</div>` : ''}
         </div>
       `;
     }
 
     // Macro bars
-    if (a.macros) {
+    if (Object.keys(n.macros).length > 0) {
       html += '<div class="card" style="margin-top: var(--space-sm);">';
-      for (const [name, m] of Object.entries(a.macros)) {
-        const pct = m.goal ? Math.min(100, Math.round((m.grams / m.goal) * 100)) : 0;
-        const color = m.grams >= m.goal * 0.85 ? 'var(--accent-green)' : 'var(--accent-orange)';
+      for (const [name, m] of Object.entries(n.macros)) {
+        const pct = m.goal ? Math.min(100, Math.round((m.actual / m.goal) * 100)) : 0;
+        const color = m.goal && m.actual >= m.goal * 0.85 ? 'var(--accent-green)' : 'var(--accent-orange)';
         html += `
           <div style="margin-bottom: var(--space-sm);">
             <div style="display:flex; justify-content:space-between; font-size:var(--text-sm);">
               <span style="text-transform:capitalize;">${name}</span>
-              <span style="color:var(--text-secondary)">${m.grams}g / ${m.goal || '?'}g</span>
+              <span style="color:var(--text-secondary)">${m.actual}g / ${m.goal || '?'}g</span>
             </div>
             <div class="progress-bar"><div class="progress-fill" style="width:${pct}%; background:${color}"></div></div>
           </div>
@@ -85,15 +127,14 @@ const GoalsView = {
     }
 
     // Water
-    if (a.water) {
-      const w = a.water;
-      const pct = w.goal_oz ? Math.min(100, Math.round((w.total_oz / w.goal_oz) * 100)) : 0;
-      const color = w.total_oz >= w.goal_oz ? 'var(--accent-blue)' : 'var(--accent-orange)';
+    if (n.waterActual != null && n.waterGoal) {
+      const pct = Math.min(100, Math.round((n.waterActual / n.waterGoal) * 100));
+      const color = n.waterActual >= n.waterGoal ? 'var(--accent-blue)' : 'var(--accent-orange)';
       html += `
         <div class="card" style="margin-top: var(--space-sm);">
           <div style="display:flex; justify-content:space-between; margin-bottom: var(--space-xs);">
             <span style="font-weight:600;">Water</span>
-            <span style="color:var(--text-secondary)">${w.total_oz} / ${w.goal_oz} oz</span>
+            <span style="color:var(--text-secondary)">${n.waterActual} / ${n.waterGoal} oz</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%; background:${color}"></div></div>
         </div>
@@ -124,16 +165,18 @@ const GoalsView = {
   renderStreaks(streaks) {
     let html = '<h2 class="section-header">Streaks</h2><div class="stats-row">';
     const streakIcons = {
-      logging: '\u{1F4CB}',
-      waterGoal: '\u{1F4A7}',
+      logging: '\u{1F4CB}', tracking: '\u{1F4CB}',
+      waterGoal: '\u{1F4A7}', water_goal: '\u{1F4A7}',
       workout: '\u{1F4AA}',
-      proteinGoal: '\u{1F356}',
+      proteinGoal: '\u{1F356}', protein_goal: '\u{1F356}',
+      calorie_goal: '\u{1F525}',
     };
     const streakLabels = {
-      logging: 'Logging',
-      waterGoal: 'Water Goal',
+      logging: 'Logging', tracking: 'Logging',
+      waterGoal: 'Water Goal', water_goal: 'Water Goal',
       workout: 'Workout',
-      proteinGoal: 'Protein Goal',
+      proteinGoal: 'Protein Goal', protein_goal: 'Protein Goal',
+      calorie_goal: 'Calorie Goal',
     };
 
     for (const [key, val] of Object.entries(streaks)) {
@@ -153,25 +196,48 @@ const GoalsView = {
 
   renderMealPlan(plan) {
     let html = '<h2 class="section-header">Meal Plan</h2>';
-    html += `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-bottom:var(--space-sm);">Generated ${UI.formatDate(plan.generatedDate)}</div>`;
+    const genDate = plan.generatedDate || plan.generated;
+    html += `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-bottom:var(--space-sm);">Generated ${UI.formatDate(genDate)}</div>`;
 
     for (const day of plan.days) {
       html += `<div class="card" style="margin-bottom: var(--space-sm);">`;
       html += `<div style="font-weight:600; margin-bottom:var(--space-sm);">${UI.formatDate(day.date)}</div>`;
 
-      for (const meal of day.meals) {
+      // Handle remaining_meal (single suggestion for current day)
+      if (day.remaining_meal && !day.meals) {
+        const rm = day.remaining_meal;
         html += `
-          <div style="display:flex; justify-content:space-between; font-size:var(--text-sm); margin-bottom:var(--space-xs); padding: 4px 0; border-bottom: 1px solid var(--border-color);">
-            <div>
-              <span style="color:var(--text-muted); text-transform:capitalize; width:70px; display:inline-block;">${meal.type}</span>
-              ${meal.suggestion}
-            </div>
-            <span style="color:var(--text-muted); white-space:nowrap; margin-left:var(--space-sm);">${meal.approxCalories}cal</span>
+          <div style="font-size:var(--text-sm); padding: 4px 0;">
+            <div style="font-weight:500; margin-bottom:2px;">${rm.name || rm.suggestion || 'Suggestion'}</div>
+            ${rm.note ? `<div style="color:var(--text-muted); font-size:var(--text-xs); margin-bottom:4px;">${rm.note}</div>` : ''}
+            <span style="color:var(--text-muted);">${rm.calories || rm.approxCalories || '?'} cal, ${rm.protein || '?'}g protein</span>
           </div>
         `;
       }
 
-      html += `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-top:var(--space-xs);">Total: ~${day.totalCalories} cal, ~${day.totalProtein}g protein</div>`;
+      // Handle meals array
+      if (day.meals) {
+        for (const meal of day.meals) {
+          const mealType = meal.type || meal.meal || '';
+          const mealName = meal.suggestion || meal.name || meal.description || '';
+          const mealCal = meal.approxCalories || meal.calories || '?';
+          html += `
+            <div style="display:flex; justify-content:space-between; font-size:var(--text-sm); margin-bottom:var(--space-xs); padding: 4px 0; border-bottom: 1px solid var(--border-color);">
+              <div>
+                <span style="color:var(--text-muted); text-transform:capitalize; width:70px; display:inline-block;">${mealType}</span>
+                ${mealName}
+              </div>
+              <span style="color:var(--text-muted); white-space:nowrap; margin-left:var(--space-sm);">${mealCal}cal</span>
+            </div>
+          `;
+        }
+      }
+
+      const totalCal = day.totalCalories || day.day_totals?.calories || '';
+      const totalPro = day.totalProtein || day.day_totals?.protein || '';
+      if (totalCal || totalPro) {
+        html += `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-top:var(--space-xs);">Total: ~${totalCal} cal, ~${totalPro}g protein</div>`;
+      }
       html += '</div>';
     }
 
