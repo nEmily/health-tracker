@@ -197,7 +197,7 @@ const GoalsView = {
   renderMealPlan(plan) {
     let html = '<h2 class="section-header">Meal Plan</h2>';
     const genDate = plan.generatedDate || plan.generated;
-    html += `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-bottom:var(--space-sm);">Generated ${UI.formatDate(genDate)}</div>`;
+    html += genDate ? `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-bottom:var(--space-sm);">Generated ${UI.formatDate(genDate)}</div>` : '';
 
     for (const day of plan.days) {
       html += `<div class="card" style="margin-bottom: var(--space-sm);">`;

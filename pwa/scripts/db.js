@@ -339,7 +339,7 @@ async function getMealPlan() {
       const plans = request.result;
       if (plans.length === 0) return resolve(null);
       // Return the most recent plan
-      plans.sort((a, b) => b.generatedDate.localeCompare(a.generatedDate));
+      plans.sort((a, b) => (b.generatedDate || '').localeCompare(a.generatedDate || ''));
       resolve(plans[0]);
     };
     request.onerror = (e) => reject(e.target.error);
