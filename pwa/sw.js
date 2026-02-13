@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'health-tracker-v9';
+const CACHE_NAME = 'health-tracker-v10';
 
 const ASSETS = [
   './',
@@ -38,13 +38,27 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Fetch — cache-first for assets, network-first for everything else
+// Fetch — network-first for HTML (ensures updates arrive), cache-first for assets
 self.addEventListener('fetch', (e) => {
+  const isHTML = e.request.destination === 'document' || e.request.url.endsWith('/');
+
+  if (isHTML) {
+    // Network-first for HTML — always try to get fresh page
+    e.respondWith(
+      fetch(e.request).then(response => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+        return response;
+      }).catch(() => caches.match(e.request) || caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // Cache-first for JS/CSS/images (versioned via cache name)
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(response => {
-        // Don't cache non-GET or cross-origin
         if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) {
           return response;
         }
@@ -52,11 +66,6 @@ self.addEventListener('fetch', (e) => {
         caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
         return response;
       });
-    }).catch(() => {
-      // Offline fallback
-      if (e.request.destination === 'document') {
-        return caches.match('./index.html');
-      }
-    })
+    }).catch(() => null)
   );
 });
