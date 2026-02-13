@@ -89,6 +89,10 @@ const App = {
 
     UI.clearChildren(entryList);
 
+    // Show/hide export button based on entries
+    const exportDiv = document.getElementById('today-export');
+    if (exportDiv) exportDiv.style.display = entries.length > 0 ? 'block' : 'none';
+
     if (entries.length === 0) {
       entryList.innerHTML = `
         <div class="empty-state">

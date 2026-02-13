@@ -13,7 +13,18 @@ node_modules/
 # iCloud data (NEVER commit)
 iCloudDrive/
 
+# User data — photos, exports, health data (NEVER commit)
+*.zip
+*.jpeg
+*.jpg
+data/
+
 # Session files
 .claude/session-log.md
+.claude/notes/
+.claude/.last-reviewed-commit
+
+# Processing runtime
+processing/setup-task.ps1
 
 # Generated icons (keep SVG source, ignore generated PNGs if any)

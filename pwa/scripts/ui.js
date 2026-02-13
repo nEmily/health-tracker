@@ -137,15 +137,44 @@ const UI = {
 
     // Load photo thumbnail if entry has a photo
     if (entry.photo) {
-      const thumb = UI.createElement('img', 'entry-photo-thumb');
-      thumb.alt = '';
-      thumb.loading = 'lazy';
-      DB.getPhotos(entry.id).then(photos => {
-        if (photos.length > 0 && photos[0].blob) {
-          thumb.src = URL.createObjectURL(photos[0].blob);
-        }
-      });
-      div.appendChild(thumb);
+      if (entry.type === 'bodyPhoto') {
+        // Body photos are private — show lock icon, tap to reveal
+        const lock = UI.createElement('div', 'entry-photo-thumb entry-photo-locked');
+        lock.textContent = '\u{1F512}';
+        let currentPhotoUrl = null;
+        const hideLock = () => {
+          lock.classList.remove('revealed');
+          lock.textContent = '\u{1F512}';
+          lock.style.backgroundImage = '';
+          if (currentPhotoUrl) { URL.revokeObjectURL(currentPhotoUrl); currentPhotoUrl = null; }
+        };
+        lock.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (lock.classList.contains('revealed')) { hideLock(); return; }
+          DB.getPhotos(entry.id).then(photos => {
+            if (photos.length > 0 && photos[0].blob) {
+              currentPhotoUrl = URL.createObjectURL(photos[0].blob);
+              lock.textContent = '';
+              lock.style.backgroundImage = `url(${currentPhotoUrl})`;
+              lock.style.backgroundSize = 'cover';
+              lock.style.backgroundPosition = 'center';
+              lock.classList.add('revealed');
+              setTimeout(() => { if (lock.classList.contains('revealed')) hideLock(); }, 5000);
+            }
+          });
+        });
+        div.appendChild(lock);
+      } else {
+        const thumb = UI.createElement('img', 'entry-photo-thumb');
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+        DB.getPhotos(entry.id).then(photos => {
+          if (photos.length > 0 && photos[0].blob) {
+            thumb.src = URL.createObjectURL(photos[0].blob);
+          }
+        });
+        div.appendChild(thumb);
+      }
     }
 
     return div;

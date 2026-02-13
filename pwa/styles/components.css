@@ -246,6 +246,21 @@ input[type="range"]::-webkit-slider-thumb {
   flex-shrink: 0;
 }
 
+.entry-photo-locked {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.entry-photo-locked.revealed {
+  border-color: var(--accent-green);
+}
+
 /* Stat Cards */
 .stats-row {
   display: grid;
