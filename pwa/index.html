@@ -77,8 +77,13 @@
       <div class="card" style="margin-top: var(--space-sm);">
         <h3 style="font-size: var(--text-base); margin-bottom: var(--space-sm);">Sync</h3>
         <button class="btn btn-primary btn-block" onclick="Sync.exportDay()">Export Today's Data</button>
-        <button class="btn btn-secondary btn-block" style="margin-top: var(--space-sm);" onclick="Sync.importAnalysis()">Import Analysis</button>
-        <button class="btn btn-secondary btn-block" style="margin-top: var(--space-sm);" onclick="Sync.importMealPlan()">Import Meal Plan</button>
+        <button class="btn btn-secondary btn-block" style="margin-top: var(--space-sm);" onclick="Sync.smartImport()">Import (Analysis, Meal Plan, or Backup)</button>
+      </div>
+
+      <div class="card" style="margin-top: var(--space-sm);">
+        <h3 style="font-size: var(--text-base); margin-bottom: var(--space-sm);">Restore</h3>
+        <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-sm);">Restore entries from an exported ZIP backup.</p>
+        <button class="btn btn-secondary btn-block" onclick="Sync.restoreFromZip()">Restore from ZIP</button>
       </div>
 
       <div class="card" style="margin-top: var(--space-sm);">
@@ -156,7 +161,18 @@
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('SW registered:', reg.scope))
+        .then(reg => {
+          console.log('SW registered:', reg.scope);
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'activated') {
+                UI.toast('App updated — reloading...');
+                setTimeout(() => window.location.reload(), 1000);
+              }
+            });
+          });
+        })
         .catch(err => console.error('SW registration failed:', err));
     }
   </script>

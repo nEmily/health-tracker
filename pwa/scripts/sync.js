@@ -124,6 +124,192 @@ const Sync = {
     }
   },
 
+  // --- Restore from ZIP backup ---
+  async restoreFromZip() {
+    const file = await Sync.pickFile('.zip');
+    if (!file) return;
+
+    UI.toast('Restoring from backup...');
+
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const files = Sync.readZip(new Uint8Array(arrayBuf));
+
+      // Find log.json
+      const logFile = files.find(f => f.name.endsWith('log.json'));
+      if (!logFile) {
+        UI.toast('No log.json found in ZIP', 'error');
+        return;
+      }
+
+      const log = JSON.parse(new TextDecoder().decode(logFile.data));
+      if (!log.date || !log.entries) {
+        UI.toast('Invalid log format', 'error');
+        return;
+      }
+
+      // Build a map of photo filenames to blobs
+      const photoMap = {};
+      for (const f of files) {
+        if (f.name.endsWith('.jpg') || f.name.endsWith('.jpeg')) {
+          photoMap[f.name] = new Blob([f.data], { type: 'image/jpeg' });
+        }
+      }
+
+      // Import entries + photos
+      let imported = 0;
+      for (const entry of log.entries) {
+        // Find matching photo
+        let photoBlob = null;
+        if (entry.photo) {
+          // Check daily photos path and progress path
+          const dailyPath = `daily/${log.date}/photos/${entry.id}.jpg`;
+          const progressFace = `progress/${log.date}/face.jpg`;
+          const progressBody = `progress/${log.date}/body.jpg`;
+
+          photoBlob = photoMap[dailyPath]
+            || (entry.subtype === 'face' ? photoMap[progressFace] : null)
+            || (entry.subtype === 'body' ? photoMap[progressBody] : null);
+
+          // Also try matching by entry ID prefix in filename
+          if (!photoBlob) {
+            const match = Object.keys(photoMap).find(k => k.includes(`/${entry.id}.`) || k.includes(`/${entry.id}/`));
+            if (match) photoBlob = photoMap[match];
+          }
+        }
+
+        await DB.addEntry(entry, photoBlob);
+        imported++;
+      }
+
+      // Import daily summary (water, weight, sleep)
+      const summaryUpdates = {};
+      if (log.water_oz != null) summaryUpdates.water_oz = log.water_oz;
+      if (log.weight != null) summaryUpdates.weight = log.weight;
+      if (log.sleep != null) summaryUpdates.sleep = log.sleep;
+      if (Object.keys(summaryUpdates).length > 0) {
+        await DB.updateDailySummary(log.date, summaryUpdates);
+      }
+
+      UI.toast(`Restored ${imported} entries for ${UI.formatDate(log.date)}`);
+      if (log.date === App.selectedDate) App.loadDayView();
+    } catch (err) {
+      console.error('Restore failed:', err);
+      UI.toast('Restore failed — check ZIP format', 'error');
+    }
+  },
+
+  // --- Smart Import (auto-detects JSON vs ZIP) ---
+  async smartImport() {
+    const file = await Sync.pickFile('.json,.zip');
+    if (!file) return;
+
+    if (file.name.endsWith('.zip')) {
+      // Treat as backup ZIP
+      UI.toast('Restoring from backup...');
+      // Re-use the file by wrapping restoreFromZip logic
+      const arrayBuf = await file.arrayBuffer();
+      await Sync.restoreFromZipData(new Uint8Array(arrayBuf));
+    } else {
+      // Treat as JSON — could be analysis or meal plan
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (data.date && data.entries) {
+        // It's an analysis summary
+        await DB.importAnalysis(data.date, data);
+        UI.toast(`Imported analysis for ${UI.formatDate(data.date)}`);
+        if (data.date === App.selectedDate) App.loadDayView();
+      } else if (data.generated && data.days) {
+        // It's a meal plan
+        await DB.saveMealPlan({ ...data, generatedDate: data.generated });
+        UI.toast('Meal plan imported');
+      } else {
+        UI.toast('Unrecognized file format', 'error');
+      }
+    }
+  },
+
+  async restoreFromZipData(zipBytes) {
+    try {
+      const files = Sync.readZip(zipBytes);
+      const logFile = files.find(f => f.name.endsWith('log.json'));
+      if (!logFile) { UI.toast('No log.json found in ZIP', 'error'); return; }
+
+      const log = JSON.parse(new TextDecoder().decode(logFile.data));
+      if (!log.date || !log.entries) { UI.toast('Invalid log format', 'error'); return; }
+
+      const photoMap = {};
+      for (const f of files) {
+        if (f.name.endsWith('.jpg') || f.name.endsWith('.jpeg')) {
+          photoMap[f.name] = new Blob([f.data], { type: 'image/jpeg' });
+        }
+      }
+
+      let imported = 0;
+      for (const entry of log.entries) {
+        let photoBlob = null;
+        if (entry.photo) {
+          const dailyPath = `daily/${log.date}/photos/${entry.id}.jpg`;
+          const progressFace = `progress/${log.date}/face.jpg`;
+          const progressBody = `progress/${log.date}/body.jpg`;
+          photoBlob = photoMap[dailyPath]
+            || (entry.subtype === 'face' ? photoMap[progressFace] : null)
+            || (entry.subtype === 'body' ? photoMap[progressBody] : null);
+          if (!photoBlob) {
+            const match = Object.keys(photoMap).find(k => k.includes(`/${entry.id}.`) || k.includes(`/${entry.id}/`));
+            if (match) photoBlob = photoMap[match];
+          }
+        }
+        await DB.addEntry(entry, photoBlob);
+        imported++;
+      }
+
+      const summaryUpdates = {};
+      if (log.water_oz != null) summaryUpdates.water_oz = log.water_oz;
+      if (log.weight != null) summaryUpdates.weight = log.weight;
+      if (log.sleep != null) summaryUpdates.sleep = log.sleep;
+      if (Object.keys(summaryUpdates).length > 0) {
+        await DB.updateDailySummary(log.date, summaryUpdates);
+      }
+
+      UI.toast(`Restored ${imported} entries for ${UI.formatDate(log.date)}`);
+      if (log.date === App.selectedDate) App.loadDayView();
+    } catch (err) {
+      console.error('Restore failed:', err);
+      UI.toast('Restore failed — check ZIP format', 'error');
+    }
+  },
+
+  // --- Minimal ZIP Reader (for uncompressed/STORE ZIPs) ---
+  readZip(zipBytes) {
+    const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+    const files = [];
+    let offset = 0;
+
+    while (offset < zipBytes.length - 4) {
+      const sig = view.getUint32(offset, true);
+      if (sig !== 0x04034b50) break; // Not a local file header
+
+      const nameLen = view.getUint16(offset + 26, true);
+      const extraLen = view.getUint16(offset + 28, true);
+      const compressedSize = view.getUint32(offset + 18, true);
+      const nameBytes = zipBytes.slice(offset + 30, offset + 30 + nameLen);
+      const name = new TextDecoder().decode(nameBytes);
+      const dataStart = offset + 30 + nameLen + extraLen;
+      if (dataStart + compressedSize > zipBytes.length) break; // Truncated ZIP
+      const data = zipBytes.slice(dataStart, dataStart + compressedSize);
+
+      if (!name.endsWith('/')) { // Skip directory entries
+        files.push({ name, data });
+      }
+
+      offset = dataStart + compressedSize;
+    }
+
+    return files;
+  },
+
   // --- File Picker Helper ---
   pickFile(accept) {
     return new Promise((resolve) => {
