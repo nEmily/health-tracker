@@ -3,7 +3,6 @@
 # Runs every 30 min via cron. Quiet hours: midnight-8am.
 #
 # Environment variables:
-#   HEALTH_DATA_DIR  — path to data root (default: ~/HealthTracker)
 #   HEALTH_SYNC_URL  — cloud relay URL (required)
 #   HEALTH_SYNC_KEY  — cloud relay key (required)
 
@@ -17,7 +16,16 @@ if [ "$HOUR" -ge 0 ] && [ "$HOUR" -lt 8 ]; then
     exit 0
 fi
 
-DATA_DIR="${HEALTH_DATA_DIR:-$HOME/HealthTracker}"
+# Data dir: auto-detect based on script location
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+if [ -d "$PARENT_DIR/profile" ]; then
+    DATA_DIR="$PARENT_DIR"
+elif [ -d "$(dirname "$PARENT_DIR")/coach/profile" ]; then
+    DATA_DIR="$(dirname "$PARENT_DIR")/coach"
+else
+    echo "[watcher] ERROR: Cannot find coach data directory."
+    exit 1
+fi
 LOCK_FILE="$DATA_DIR/processing.lock"
 
 # Lock file check with stale detection (>60 min)

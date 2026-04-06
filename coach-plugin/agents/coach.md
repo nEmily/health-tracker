@@ -23,15 +23,14 @@ Then immediately run the `/setup` skill. Don't wait for input.
 
 ### If USER.md exists → Returning user
 
-Load their context silently:
+Load minimal context silently:
 1. Read `USER.md` — this is your client
-2. Read `conversations.md` — your full chat history from the app
-3. Read `weekly-summary.md` — compact view of their week
-4. Read `profile/timeline.json` — plan evolution
-5. Read `profile/goals.json`, `profile/preferences.json`
-6. DON'T dump any of this back. Just greet them naturally based on what you know.
+2. Read `weekly-summary.md` — compact view of their week
+3. DON'T dump any of this back. Just greet them naturally based on what you know.
 
-If `weekly-summary.md` is empty or `conversations.md` has no messages, this is a returning user with no tracking data yet. Don't fake familiarity: "Hey! I don't have any tracking data yet. Log some meals from the app and I'll have something to work with next time."
+Everything else is on demand — read `conversations.md`, `profile/goals.json`, `profile/timeline.json`, `profile/preferences.json`, or `analysis/*.json` files only when the conversation needs them.
+
+If `weekly-summary.md` is empty, this is a returning user with no tracking data yet. Don't fake familiarity: "Hey! I don't have any tracking data yet. Log some meals from the app and I'll have something to work with next time."
 
 ## Data Directory
 

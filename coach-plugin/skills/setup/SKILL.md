@@ -121,40 +121,24 @@ if [ -z "$key" ]; then echo "ERROR: Could not generate UUID. Install uuidgen or 
 echo "$key"
 ```
 
-**Set environment variables** (data dir = current directory):
+**Set environment variables** (sync credentials only — data dir is derived from repo location):
 
 PowerShell (Windows):
 ```powershell
-$coachDir = (Get-Location).Path
 [System.Environment]::SetEnvironmentVariable("HEALTH_SYNC_URL", "https://health-sync.emilyn-90a.workers.dev", "User")
 [System.Environment]::SetEnvironmentVariable("HEALTH_SYNC_KEY", "$key", "User")
-[System.Environment]::SetEnvironmentVariable("HEALTH_DATA_DIR", "$coachDir", "User")
-[System.Environment]::SetEnvironmentVariable("COACH_DIR", "$coachDir", "User")
 ```
 
 Mac/Linux — write to BOTH .bashrc and .zshrc, with dedup:
 ```bash
 RELAY="https://health-sync.emilyn-90a.workers.dev"
-COACH_DIR="$(pwd)"
 for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-    sed -i.bak '/HEALTH_SYNC_URL\|HEALTH_SYNC_KEY\|HEALTH_DATA_DIR\|COACH_DIR/d' "$rc" 2>/dev/null
+    sed -i.bak '/HEALTH_SYNC_URL\|HEALTH_SYNC_KEY/d' "$rc" 2>/dev/null
     cat >> "$rc" <<ENVEOF
 export HEALTH_SYNC_URL='$RELAY'
 export HEALTH_SYNC_KEY='$key'
-export HEALTH_DATA_DIR='$COACH_DIR'
-export COACH_DIR='$COACH_DIR'
 ENVEOF
 done
-```
-
-Also write a `.env` file for cron/scheduled tasks (which don't source shell RC files):
-```bash
-cat > .env <<ENVEOF
-HEALTH_SYNC_URL=$RELAY
-HEALTH_SYNC_KEY=$key
-HEALTH_DATA_DIR=$(pwd)
-COACH_DIR=$(pwd)
-ENVEOF
 ```
 
 **Save the sync key** — it's needed for the phone setup later in the conversation.

@@ -9,8 +9,18 @@ REM IMPORTANT: Re-processes dates when the relay has new pending data (relay = n
 
 setlocal enabledelayedexpansion
 
-if defined HEALTH_DATA_DIR (set DATA_DIR=%HEALTH_DATA_DIR%) else (set DATA_DIR=%USERPROFILE%\HealthTracker)
-if defined HEALTH_REPO_DIR (set REPO_DIR=%HEALTH_REPO_DIR%) else (set REPO_DIR=%~dp0..)
+REM Data dir: auto-detect based on script location
+set SCRIPT_PARENT=%~dp0..
+if exist "%SCRIPT_PARENT%\profile" (
+    set DATA_DIR=%SCRIPT_PARENT%
+    set REPO_DIR=%SCRIPT_PARENT%
+) else if exist "%SCRIPT_PARENT%\..\coach\profile" (
+    set DATA_DIR=%SCRIPT_PARENT%\..\coach
+    set REPO_DIR=%SCRIPT_PARENT%\..
+) else (
+    echo [ERROR] Cannot find coach data directory.
+    exit /b 1
+)
 if defined HEALTH_BACKUP_DIR (set BACKUP_DIR=%HEALTH_BACKUP_DIR%) else (set BACKUP_DIR=%USERPROFILE%\health-data-backup)
 set LOCK_FILE=%DATA_DIR%\processing.lock
 

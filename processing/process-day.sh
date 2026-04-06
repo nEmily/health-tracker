@@ -7,8 +7,6 @@
 # IMPORTANT: Never re-processes dates that already have analysis.
 #
 # Environment variables:
-#   HEALTH_DATA_DIR   — path to data root (default: ~/HealthTracker)
-#   HEALTH_REPO_DIR   — path to repo (default: parent of this script)
 #   HEALTH_BACKUP_DIR — path to backup dir (default: ~/health-data-backup)
 #   HEALTH_SYNC_URL   — cloud relay URL (required)
 #   HEALTH_SYNC_KEY   — cloud relay key (required)
@@ -17,8 +15,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-DATA_DIR="${HEALTH_DATA_DIR:-$HOME/HealthTracker}"
-REPO_DIR="${HEALTH_REPO_DIR:-$(dirname "$SCRIPT_DIR")}"
+# Data dir: auto-detect based on script location
+# If deployed to <data>/processing/ (normal users), parent has profile/
+# If in repo at <repo>/processing/ (dev), parent/coach has profile/
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+if [ -d "$PARENT_DIR/profile" ]; then
+    DATA_DIR="$PARENT_DIR"
+    REPO_DIR="$PARENT_DIR"
+elif [ -d "$PARENT_DIR/coach/profile" ]; then
+    DATA_DIR="$PARENT_DIR/coach"
+    REPO_DIR="$PARENT_DIR"
+else
+    echo "[ERROR] Cannot find coach data directory."
+    exit 1
+fi
 BACKUP_DIR="${HEALTH_BACKUP_DIR:-$HOME/health-data-backup}"
 LOCK_FILE="$DATA_DIR/processing.lock"
 
