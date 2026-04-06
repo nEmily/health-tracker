@@ -1,7 +1,18 @@
 # Health Tracker Watcher — polls relay for pending data, runs processing if found
 # Runs every 30 min via Task Scheduler. Quiet hours: midnight-8am.
 
-$dataDir = if ($env:HEALTH_DATA_DIR) { $env:HEALTH_DATA_DIR } else { "$env:USERPROFILE\HealthTracker" }
+# Data dir: auto-detect based on script location
+# If deployed to <data>/processing/ (normal users), parent has profile/
+# If in repo at <repo>/coach-plugin/scripts/ (dev), ../../coach has profile/
+$parentDir = Split-Path $PSScriptRoot
+if (Test-Path (Join-Path $parentDir 'profile')) {
+    $dataDir = $parentDir
+} elseif (Test-Path (Join-Path (Split-Path $parentDir) 'coach' 'profile')) {
+    $dataDir = Join-Path (Split-Path $parentDir) 'coach'
+} else {
+    Write-Error "Cannot find coach data directory."
+    exit 1
+}
 $logDir = "$dataDir\logs"
 if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
@@ -22,7 +33,6 @@ if ($hour -ge 0 -and $hour -lt 8) {
 }
 
 # Atomic lock file — prevents concurrent processing (TOCTOU-safe)
-$dataDir = if ($env:HEALTH_DATA_DIR) { $env:HEALTH_DATA_DIR } else { "$env:USERPROFILE\HealthTracker" }
 $lockFile = "$dataDir\processing.lock"
 
 # Try to acquire lock atomically (CreateNew fails if file exists)

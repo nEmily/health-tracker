@@ -19,8 +19,9 @@ Set these as persistent environment variables (user-level, not system-level):
 |----------|----------|---------|-------------|
 | `HEALTH_SYNC_URL` | Yes | — | Relay URL, e.g. `https://health-sync.example.workers.dev` |
 | `HEALTH_SYNC_KEY` | Yes | — | Your UUID sync key |
-| `HEALTH_REPO_DIR` | No | auto-detected | Path to your cloned repo |
 | `HEALTH_BACKUP_DIR` | No | `~/health-data-backup` | Local backup destination |
+
+The data directory is automatically derived as `<repo>/coach` — no environment variable needed.
 
 **Windows (PowerShell, run once):**
 

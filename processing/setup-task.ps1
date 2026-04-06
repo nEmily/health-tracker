@@ -1,7 +1,8 @@
 # Health Tracker — Task Scheduler setup
 # Run this once (elevated) to register both tasks
 
-$projectDir = Join-Path $env:USERPROFILE "projects\health-tracker\processing"
+# Derive processing dir from script location
+$projectDir = $PSScriptRoot
 
 # --- Watcher: polls relay every 30 min, processes if pending ---
 $watcherPath = Join-Path $projectDir 'watcher.ps1'

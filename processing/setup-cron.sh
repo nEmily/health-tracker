@@ -15,7 +15,9 @@ fi
 chmod +x "$WATCHER"
 chmod +x "$SCRIPT_DIR/process-day.sh"
 
-CRON_LINE="*/30 * * * * $WATCHER >> \"\${HEALTH_DATA_DIR:-\$HOME/HealthTracker}/logs/watcher.log\" 2>&1"
+# Watcher auto-detects data dir at runtime; logs go to its data dir
+# Just point cron output to a stable location
+CRON_LINE="*/30 * * * * $WATCHER >> /tmp/coach-watcher.log 2>&1"
 
 # Add if not already present
 if crontab -l 2>/dev/null | grep -qF "$WATCHER"; then
