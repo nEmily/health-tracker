@@ -7,7 +7,7 @@
 $parentDir = Split-Path $PSScriptRoot
 if (Test-Path (Join-Path $parentDir 'profile')) {
     $dataDir = $parentDir
-} elseif (Test-Path (Join-Path $parentDir 'coach' 'profile')) {
+} elseif (Test-Path (Join-Path (Join-Path $parentDir 'coach') 'profile')) {
     $dataDir = Join-Path $parentDir 'coach'
 } else {
     Write-Error "Cannot find coach data directory. Expected profile/ at $parentDir or $parentDir\coach"
