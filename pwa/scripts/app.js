@@ -1017,16 +1017,12 @@ const App = {
       const hasAnyEntries = isToday ? await DB.hasAnyEntries() : true;
       const hasAnalysis = isToday ? !!(await DB.getAnalysis(date)) : false;
       if (App.currentScreen !== 'today') return;
-      if (isToday && !hasAnyEntries && !hasAnalysis) {
-        // Pre-populate goals for new users
+      if (isToday && !hasAnyEntries && !hasAnalysis && !localStorage.getItem('cloudRelay_backup')) {
+        // Brand new user, not yet paired — show welcome/pairing card
         await App.ensureDefaultGoals();
         entryList.innerHTML = App.renderWelcomeCard();
-        // Hide all chrome until Coach is set up — just show the welcome card
         App.setSetupMode(true);
-        // Init pairing code inputs if sync not configured
-        if (!localStorage.getItem('cloudRelay_backup')) {
-          App.initPairingInputs();
-        }
+        App.initPairingInputs();
       } else {
         // Existing user — make sure chrome is visible
         App.setSetupMode(false);
@@ -1164,22 +1160,33 @@ const App = {
       } catch (e) { mealSuggEl.innerHTML = ''; }
     }
 
-    // Challenge widgets on Diet panel
-    try {
-      const activeChallenges = await DB.getActiveChallenges();
-      if (activeChallenges.length > 0) {
-        let chalHtml = '';
+    // Challenge widgets on Diet panel — clean up previous renders first
+    if (entryList.parentNode) {
+      entryList.parentNode.querySelectorAll('.challenge-day-widget').forEach(el => el.remove());
+    }
+    if (!App._setupMode) {
+      try {
+        const activeChallenges = await DB.getActiveChallenges();
+        // Fix: check status (expiry) before rendering — otherwise dead challenges linger
+        const stillActive = [];
         for (const chal of activeChallenges) {
-          chalHtml += await Challenges.renderDayChecklist(chal, date);
+          await Challenges.checkStatus(chal, date);
+          if (chal.status === 'active') stillActive.push(chal);
         }
-        if (chalHtml) {
-          const chalContainer = UI.createElement('div', '');
-          chalContainer.innerHTML = chalHtml;
-          entryList.parentNode.appendChild(chalContainer);
-          Challenges.bindEvents(chalContainer);
+        if (stillActive.length > 0) {
+          let chalHtml = '';
+          for (const chal of stillActive) {
+            chalHtml += await Challenges.renderDayChecklist(chal, date);
+          }
+          if (chalHtml) {
+            const chalContainer = UI.createElement('div', 'challenge-day-widget');
+            chalContainer.innerHTML = chalHtml;
+            entryList.parentNode.appendChild(chalContainer);
+            Challenges.bindEvents(chalContainer);
+          }
         }
-      }
-    } catch (e) { console.warn('Challenge widget error:', e); }
+      } catch (e) { console.warn('Challenge widget error:', e); }
+    }
 
     // Update panel container height (panels use transform, which doesn't affect layout)
     App._updatePanelHeight();
@@ -1293,6 +1300,7 @@ const App = {
   },
 
   setSetupMode(on) {
+    App._setupMode = on;
     // Hide/show all chrome so new users only see the welcome card
     const ids = ['today-score', 'today-stats', 'quick-actions', 'today-meal-suggestion'];
     const classes = ['today-segments', 'header-nav'];
@@ -1470,11 +1478,15 @@ const App = {
     inputs.forEach(i => { i.disabled = true; });
 
     try {
-      const resp = await fetch(`https://health-sync.emilyn-90a.workers.dev/pair/${code}`);
+      const pairBase = location.hostname === 'localhost' || /^(10|192\.168|100)\.\d/.test(location.hostname)
+        ? location.origin : 'https://health-sync.emilyn-90a.workers.dev';
+      const resp = await fetch(`${pairBase}/pair/${code}`);
       if (resp.ok) {
         const data = await resp.json();
-        await CloudRelay.saveConfig({ workerUrl: data.relay, syncKey: data.syncKey });
+        const workerUrl = /^(10|192\.168|100)\.\d/.test(location.hostname) ? location.origin : data.relay;
+        await CloudRelay.saveConfig({ workerUrl, syncKey: data.syncKey });
         UI.toast('Sync connected');
+        App.setSetupMode(false);
         App.loadDayView();
       } else if (resp.status === 404) {
         // Auto-retry once after 2s (R2 edge replication delay)
