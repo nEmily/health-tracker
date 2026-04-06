@@ -342,7 +342,7 @@ const ALLOWED_ORIGINS = [
 ];
 
 function isLocalDev(origin) {
-  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  return /^http:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|100\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
 }
 
 function cors(response, request) {

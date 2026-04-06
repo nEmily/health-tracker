@@ -1377,6 +1377,7 @@ input[type="range"]::-webkit-slider-thumb {
   border-left: 3px solid var(--entry-color, var(--border-accent));
   animation: slideInUp 0.25s ease both;
   transition: background var(--transition-fast), transform var(--transition-fast);
+  cursor: pointer;
 }
 
 .entry-item:active {
@@ -1393,6 +1394,8 @@ input[type="range"]::-webkit-slider-thumb {
 .entry-item[data-type="weight"] { --entry-color: var(--color-weight); }
 .entry-item[data-type="bodyPhoto"] { --entry-color: var(--color-body-photo); }
 .entry-item[data-type="sleep"] { --entry-color: var(--color-sleep); }
+.entry-item[data-type="supplement"] { --entry-color: var(--color-supplement, var(--accent-secondary, #9f7aea)); }
+.entry-item[data-type="period"] { --entry-color: var(--color-period, #e879a0); }
 .entry-item[data-type="custom"] { --entry-color: var(--accent-red); }
 
 .entry-icon {

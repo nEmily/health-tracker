@@ -41,6 +41,7 @@ test-fixtures/new-tests-insert.js
 TODO.md
 start-dev-server.bat
 start-dev-server.vbs
+dev-server.js
 
 # Root test dependencies (not part of the app)
 /package.json
