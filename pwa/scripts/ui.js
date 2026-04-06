@@ -361,8 +361,10 @@ const UI = {
     return wrapper;
   },
 
-  // Render an entry from analysis data (read-only, used when IndexedDB entries are missing)
+  // Render an entry from analysis data (recovery mode — IndexedDB entries missing)
+  // Tapping creates a real entry from the analysis data so it becomes fully editable.
   renderAnalysisEntry(ae) {
+    const wrapper = UI.createElement('div', 'entry-swipe-wrap');
     const div = UI.createElement('div', 'entry-item');
     div.dataset.type = ae.type;
 
@@ -390,10 +392,38 @@ const UI = {
       body.appendChild(dur);
     }
 
+    const time = UI.createElement('div', 'entry-time');
+    if (ae.timestamp) time.textContent = UI.formatTime(ae.timestamp);
+    body.appendChild(time);
+
     div.appendChild(icon);
     div.appendChild(body);
 
-    return div;
+    // Tap to re-create as a real entry and open edit modal
+    div.addEventListener('click', async () => {
+      const entry = {
+        id: ae.id || UI.generateId(ae.type),
+        type: ae.type,
+        subtype: ae.subtype || null,
+        date: ae.date || App.selectedDate,
+        timestamp: ae.timestamp || new Date().toISOString(),
+        notes: ae.description || ae.notes || '',
+        photo: null,
+        duration_minutes: ae.duration_minutes || null,
+        weight_value: ae.weight_value || null,
+        weight_unit: ae.weight_unit || null,
+      };
+      // Persist to IndexedDB so it becomes a real editable entry
+      try {
+        await DB.addEntry(entry);
+      } catch (e) {
+        // Entry may already exist if tapped twice — ignore duplicate key errors
+      }
+      UI.showEditModal(entry);
+    });
+
+    wrapper.appendChild(div);
+    return wrapper;
   },
 
   // --- Edit Entry Modal ---

@@ -1029,7 +1029,7 @@ const App = {
         // Try to show entries from analysis data (recovery after reinstall)
         if (analysis && analysis.entries && analysis.entries.length > 0) {
           analysis.entries.forEach(ae => {
-            entryList.appendChild(UI.renderAnalysisEntry(ae));
+            entryList.appendChild(UI.renderAnalysisEntry({ ...ae, date: analysis.date || date }));
           });
         } else {
           if (isToday) {
