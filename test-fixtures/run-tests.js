@@ -4006,6 +4006,113 @@ async function testDailiesManager(page, fixtures) {
   await page.waitForTimeout(200);
 }
 
+async function testDailiesDeletionPersists(page, fixtures) {
+  console.log('\n--- Dailies Deletion Persists Across Sync Re-import ---');
+
+  // Seed: collagen daily in supplements + an analysis that echoes it back in pwaProfile
+  await page.evaluate(async () => {
+    await DB.setProfile('supplements', [
+      { key: 'collagen', name: 'Collagen Peptides', notes: '', calories: 70, protein: 18, carbs: 0, fat: 0, pending: false },
+    ]);
+    await DB.setProfile('deletedDailies', []);
+  });
+
+  // Navigate to Today and open dailies manager
+  await page.click('nav button:has-text("Today")');
+  await page.waitForTimeout(400);
+
+  const suppBtn = await page.$('#quick-supplement-btn');
+  if (suppBtn) {
+    await suppBtn.click();
+    await page.waitForTimeout(300);
+    const manageBtn = await page.$('#sp-manage');
+    if (manageBtn) {
+      await manageBtn.click();
+      await page.waitForTimeout(400);
+    }
+  }
+
+  // Verify collagen appears in the list
+  const listBefore = await page.$eval('#dm-list', el => el.textContent).catch(() => '');
+  assert(listBefore.includes('Collagen'), 'Collagen daily appears in list before delete');
+
+  // Delete collagen via remove button
+  const removeBtn = await page.$('.dailies-remove');
+  assert(!!removeBtn, 'Remove button exists for collagen daily');
+  if (removeBtn) {
+    await removeBtn.click();
+    await page.waitForTimeout(600);
+  }
+
+  // Verify collagen is gone from list
+  const listAfterDelete = await page.$eval('#dm-list', el => el.textContent).catch(() => '');
+  assert(!listAfterDelete.includes('Collagen'), 'Collagen removed from list immediately after delete');
+
+  // Verify deletedDailies was persisted with the key
+  const deletedDailies = await page.evaluate(async () => {
+    return await DB.getProfile('deletedDailies');
+  });
+  assert(Array.isArray(deletedDailies) && deletedDailies.includes('collagen'), 'deletedDailies profile key contains "collagen" after delete');
+
+  // Close the manager
+  const closeBtn = await page.$('#dm-close');
+  if (closeBtn) await closeBtn.click();
+  await page.waitForTimeout(200);
+
+  // Simulate a sync re-import that echoes collagen back in pwaProfile.supplements
+  // (This is exactly what happens when an old analysis result arrives from the cloud)
+  await page.evaluate(async () => {
+    await DB.importAnalysis('2026-04-07', {
+      date: '2026-04-07',
+      importedAt: Date.now(),
+      pwaProfile: {
+        supplements: [
+          { key: 'collagen', name: 'Collagen Peptides', notes: '', calories: 70, protein: 18, carbs: 0, fat: 0, pending: false },
+        ],
+      },
+      entries: [],
+      highlights: [],
+      concerns: [],
+    });
+  });
+
+  // After re-import, collagen must NOT reappear in supplements
+  const supplementsAfterImport = await page.evaluate(async () => {
+    return await DB.getProfile('supplements');
+  });
+  const collagenResurrected = supplementsAfterImport && supplementsAfterImport.some(s => s.key === 'collagen');
+  assert(!collagenResurrected, 'Collagen does NOT reappear in supplements after sync re-import (deletion persists)');
+
+  // Force close any stale modals before navigating
+  await page.evaluate(() => { document.querySelectorAll('.modal-overlay').forEach(el => el.remove()); });
+  await page.waitForTimeout(200);
+
+  // Navigate away and back to verify the persisted state
+  await page.click('nav button:has-text("Coach")');
+  await page.waitForTimeout(300);
+  await page.click('nav button:has-text("Today")');
+  await page.waitForTimeout(400);
+
+  // Reopen dailies to confirm collagen still absent
+  const suppBtn2 = await page.$('#quick-supplement-btn');
+  if (suppBtn2) {
+    await suppBtn2.click();
+    await page.waitForTimeout(300);
+    const manageBtn2 = await page.$('#sp-manage');
+    if (manageBtn2) {
+      await manageBtn2.click();
+      await page.waitForTimeout(400);
+    }
+  }
+
+  const listAfterNav = await page.$eval('#dm-list', el => el.textContent).catch(() => '');
+  assert(!listAfterNav.includes('Collagen'), 'Collagen remains absent from dailies after navigation and sync re-import');
+
+  // Force close all modals to leave a clean state for subsequent tests
+  await page.evaluate(() => { document.querySelectorAll('.modal-overlay').forEach(el => el.remove()); });
+  await page.waitForTimeout(200);
+}
+
 async function testVoiceLogging(page, context, fixtures) {
   console.log('\n--- Voice Logging ---');
 
@@ -7850,6 +7957,7 @@ async function run() {
     await testSkincarePanel(page, fixtures);
     await testFitnessPanel(page, fixtures);
     await testDailiesManager(page, fixtures);
+    await testDailiesDeletionPersists(page, fixtures);
     await testVisualQA(page, fixtures);
     await testVisualQA320(page, context, fixtures);
     await testChallenges(page, context, fixtures);

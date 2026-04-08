@@ -402,22 +402,25 @@ async function getAnalysis(dateStr) {
 async function importAnalysis(dateStr, data) {
   const db = await openDB();
 
-  // Pre-read local supplements and moreOptions before the write transaction
+  // Pre-read local supplements, moreOptions, and deletedDailies before the write transaction
   // to avoid IDB transaction auto-commit timing issues with async get→put chains
   let localSupplements = [];
   let localMoreOptions = [];
+  let deletedDailiesSet = new Set();
   if (data.pwaProfile && (data.pwaProfile.supplements || data.pwaProfile.moreOptions)) {
     const readTx = db.transaction('profile', 'readonly');
     const readStore = readTx.objectStore('profile');
-    const [suppResult, moreResult] = await Promise.all([
+    const [suppResult, moreResult, deletedResult] = await Promise.all([
       new Promise(r => { const req = readStore.get('supplements'); req.onsuccess = () => r(req.result?.value || []); req.onerror = () => r([]); }),
       new Promise(r => { const req = readStore.get('moreOptions'); req.onsuccess = () => r(req.result?.value || []); req.onerror = () => r([]); }),
+      new Promise(r => { const req = readStore.get('deletedDailies'); req.onsuccess = () => r(req.result?.value || []); req.onerror = () => r([]); }),
     ]);
     localSupplements = suppResult;
     localMoreOptions = moreResult;
+    deletedDailiesSet = new Set(deletedResult);
   }
 
-  const stores = ['analysis', 'photos'];
+  const stores = ['analysis', 'photos', 'dailySummary'];
   if (db.objectStoreNames.contains('analysisHistory')) stores.push('analysisHistory');
   if (data.mealPlan) stores.push('mealPlan');
   if (data.regimen || data.pwaProfile || data.supplementUpdates || data.settingUpdates) stores.push('profile');
@@ -440,15 +443,16 @@ async function importAnalysis(dateStr, data) {
       profileStore.put({ key: 'goals', value: data.pwaProfile.goals });
     }
     if (data.pwaProfile.supplements && !data.supplementUpdates) {
-      // Merge echo-back supplements with local — don't overwrite items added since last upload
+      // Merge echo-back supplements with local — don't overwrite items added since last upload,
+      // and never re-add items the user explicitly deleted (tracked in deletedDailies).
       const remote = data.pwaProfile.supplements;
-      if (localSupplements.length === 0) {
+      if (localSupplements.length === 0 && deletedDailiesSet.size === 0) {
         profileStore.put({ key: 'supplements', value: remote });
       } else {
         const localKeys = new Set(localSupplements.map(s => s.key));
         const merged = [...localSupplements];
         for (const item of remote) {
-          if (!localKeys.has(item.key)) merged.push(item);
+          if (!localKeys.has(item.key) && !deletedDailiesSet.has(item.key)) merged.push(item);
         }
         profileStore.put({ key: 'supplements', value: merged });
       }

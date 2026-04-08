@@ -661,19 +661,28 @@ const QuickLog = {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const idx = parseInt(btn.dataset.index);
+          const removed = items[idx];
           items.splice(idx, 1);
-          saveAndRender();
+          saveAndRender(removed ? removed.key : null);
         });
       });
     };
 
     let saving = false;
-    const saveAndRender = async () => {
+    const saveAndRender = async (deletedKey) => {
       if (saving) return;
       saving = true;
       try {
         await DB.setProfile('supplements', items);
         QuickLog._supplements = items;
+        // Persist deleted key so sync re-import cannot resurrect it
+        if (deletedKey) {
+          const existing = await DB.getProfile('deletedDailies') || [];
+          if (!existing.includes(deletedKey)) {
+            existing.push(deletedKey);
+            await DB.setProfile('deletedDailies', existing);
+          }
+        }
       } catch (err) {
         console.error('Failed to save dailies:', err);
         UI.toast('Failed to save changes', 'error');
