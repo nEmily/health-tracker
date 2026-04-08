@@ -25,6 +25,7 @@ You are generating a meal plan and workout regimen based on today's health data.
    - Read the Phase 1 analysis for `coachResponses` -- if any response mentions a plan change or regimen update, factor that into the plan generation.
    - Check `_planRequested` flag -- if true, generate a fresh plan rather than incremental updates.
    - Read `{DATA_DIR}/profile/coach-context.md` if it exists -- this contains persistent coaching context (equipment status, training goals, progression plans) that should inform plan generation.
+   - **Injury-driven exercise requests:** If a coachResponse or coach-todos entry mentions adding specific exercises due to injury or rehab (e.g., neck strengthening after a strain), those exercises must appear in the generated regimen -- even if `_planRequested` is false. Check `{DATA_DIR}/coach-todos.json` for pending items and `{DATA_DIR}/profile/regimen.json` for whether they were already added. If already in regimen.json, preserve them in the output regimen exactly. If not yet added, add them now in the warmup section of the relevant days.
 
 3. **Generate a rolling 3-day meal plan:**
    - **Read `preferences.json` first** -- it defines meal structure (meals per day, office vs home day split, OMAD rules, snack policy). Follow it exactly.

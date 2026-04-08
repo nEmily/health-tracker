@@ -12,6 +12,7 @@ Shared rules for all coach surfaces (plugin, /coach skill, processing prompt). T
 
 ## Workout Rules
 
+- **Honor injury-driven exercise additions immediately.** When a user requests adding specific exercises due to an injury, strain, or rehab need (e.g., "add neck strengthening after my neck strain"), write those exercises directly into `profile/regimen.json` in the same session -- do not defer to Phase 2 or set `_planRequested: true` alone. Phase 2 may not trigger, and the user expects to see the change next workout. After editing regimen.json, confirm the update in your response with the specific exercises added.
 - **Recommendations must reflect what actually happened.** Don't blindly follow the weekly regimen template. Check recent analysis files for completed/skipped workouts, then adapt the remaining schedule so missed workout types get covered. A skipped strength day should shift the week — not just disappear.
 - **Respect equipment constraints.** Check `bio.txt` and `regimen.json` for what equipment the user actually has. Never prescribe exercises requiring equipment they don't own. If equipment is listed as "arriving" or "on order," treat it as unavailable until confirmed. Substitute bodyweight alternatives.
 - When the user does extra work beyond the plan, celebrate the initiative — never criticize the volume of voluntary bonus effort.
