@@ -582,6 +582,42 @@ async function importAnalysis(dateStr, data) {
   const { mealPlan, regimen, pwaProfile, ...analysisData } = data;
   tx.objectStore('analysis').put({ ...analysisData, date: dateStr, importedAt: Date.now() });
 
+  // Write corrected weight back to dailySummary so the chart reflects the correction.
+  // The processing script may auto-correct impossible values (e.g. 1028 -> 102.8 for a missing
+  // decimal point). Without this, dailySummary.weight.value stays at the raw bad value and
+  // the weight trend chart shows the corrupted number even after the analysis correction syncs back.
+  if (data.weight && data.weight.corrected && typeof data.weight.value === 'number') {
+    const summaryStore = tx.objectStore('dailySummary');
+    const summaryReq = summaryStore.get(dateStr);
+    summaryReq.onsuccess = () => {
+      const existing = summaryReq.result || { date: dateStr };
+      const updated = {
+        ...existing,
+        date: dateStr,
+        weight: {
+          ...(existing.weight || {}),
+          value: data.weight.value,
+          unit: data.weight.unit || (existing.weight && existing.weight.unit) || 'lbs',
+          corrected: true,
+        },
+      };
+      // Also patch weightLog entries if present — keep them consistent
+      if (Array.isArray(updated.weightLog) && updated.weightLog.length > 0) {
+        const sorted = updated.weightLog.slice().sort((a, b) => {
+          const ta = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
+          const tb = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
+          return ta - tb;
+        });
+        // Only patch the first (earliest) entry — that's the one renderWeightTrend uses
+        if (typeof sorted[0].value === 'number' && sorted[0].value > 200) {
+          sorted[0].value = data.weight.value;
+          updated.weightLog = sorted;
+        }
+      }
+      summaryStore.put(updated);
+    };
+  }
+
   // Mark meal photos for this date as processed
   const photoIndex = tx.objectStore('photos').index('date');
   const request = photoIndex.openCursor(dateStr);

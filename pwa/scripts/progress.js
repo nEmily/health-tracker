@@ -575,7 +575,8 @@ const ProgressView = {
     for (const s of summaries) {
       if (s.weightLog && s.weightLog.length > 0) {
         // Use the first measurement of the day (most consistent for trend)
-        const sorted = s.weightLog.slice().sort((a, b) => a.timestamp - b.timestamp);
+        const toMs = t => typeof t === 'number' ? t : new Date(t).getTime();
+        const sorted = s.weightLog.slice().sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
         points.push({ date: s.date, weight: sorted[0].value });
         for (const entry of s.weightLog) {
           if (entry.timestamp) allMeasurements.push(entry);
@@ -1835,7 +1836,8 @@ const ProgressView = {
     const weightPoints = [];
     for (const s of summaries) {
       if (s.weightLog?.length) {
-        const sorted = s.weightLog.slice().sort((a, b) => a.timestamp - b.timestamp);
+        const toMs = t => typeof t === 'number' ? t : new Date(t).getTime();
+        const sorted = s.weightLog.slice().sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
         weightPoints.push({ date: s.date, weight: sorted[0].value });
       } else if (s.weight?.value) {
         weightPoints.push({ date: s.date, weight: s.weight.value });
