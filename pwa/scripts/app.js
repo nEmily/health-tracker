@@ -2137,6 +2137,63 @@ const Settings = {
     } catch { /* leave empty */ }
   },
 
+  async clearCoachHistory() {
+    const overlay = UI.createElement('div', 'modal-overlay');
+    const sheet = UI.createElement('div', 'modal-sheet');
+    sheet.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">Clear Coach Chat History</span>
+        <button class="modal-close" id="cch-close" aria-label="Close">&times;</button>
+      </div>
+      <p style="font-size:var(--text-sm);color:var(--text-primary);margin-bottom:var(--space-sm);">
+        Permanently delete all coach conversations stored on this device.
+      </p>
+      <ul style="font-size:var(--text-xs);color:var(--text-secondary);margin:0 0 var(--space-md) var(--space-md);padding:0;line-height:1.8;">
+        <li>All messages you sent to your coach</li>
+        <li>All coach replies and proactive advice</li>
+        <li>All setting-update notifications</li>
+      </ul>
+      <p style="font-size:var(--text-xs);color:var(--text-muted);margin-bottom:var(--space-md);">
+        Health entries, photos, goals, and analysis summaries are not affected.
+        Cloud copies of messages embedded in sync ZIPs are not deleted.
+      </p>
+      <div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);">
+        <button class="btn btn-secondary btn-block" id="cch-cancel">Cancel</button>
+        <button class="btn btn-danger btn-block" id="cch-confirm">Clear History</button>
+      </div>
+    `;
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    const closeModal = () => overlay.remove();
+    document.getElementById('cch-close').addEventListener('click', closeModal);
+    document.getElementById('cch-cancel').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+    document.getElementById('cch-confirm').addEventListener('click', async () => {
+      const btn = document.getElementById('cch-confirm');
+      btn.disabled = true;
+      btn.textContent = 'Clearing...';
+
+      try {
+        await DB.clearCoachHistory();
+        overlay.remove();
+        UI.toast('Coach chat history cleared');
+        // Refresh coach tab if it is currently visible
+        const coachContainer = document.getElementById('coach-inbox');
+        if (coachContainer) {
+          coachContainer.innerHTML = await CoachChat.render(App.selectedDate);
+          CoachChat.bindEvents(App.selectedDate);
+        }
+      } catch (err) {
+        console.error('Clear coach history failed:', err);
+        UI.toast('Clear failed — try again', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Clear History';
+      }
+    });
+  },
+
   async deleteAllData() {
     // Step 1: show confirmation modal with DELETE typed confirmation
     const overlay = UI.createElement('div', 'modal-overlay');

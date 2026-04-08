@@ -1014,6 +1014,68 @@ async function getChallengeProgressRange(challengeId, startDate, endDate) {
   });
 }
 
+// --- Coach Chat History ---
+
+// Wipe all coachChat fields from dailySummary and coachResponses from analysis.
+// This is a client-side-only operation — cloud copies are not touched.
+// TODO: relay-side coach data lives embedded in ZIPs (log.json) and results
+// (analysis JSON coachResponses). A future endpoint DELETE /sync/{key}/coach
+// would need to re-PUT each affected ZIP with coachChat stripped — significant
+// scope. For now, cloud copies are not deleted; only local IndexedDB is wiped.
+async function clearCoachHistory() {
+  const db = await openDB();
+
+  // 1. Strip coachChat from every dailySummary record
+  const summaryTx = db.transaction('dailySummary', 'readwrite');
+  const summaryStore = summaryTx.objectStore('dailySummary');
+  const summaryReq = summaryStore.openCursor();
+  let summaryCount = 0;
+
+  await new Promise((resolve, reject) => {
+    summaryReq.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        const rec = cursor.value;
+        if (rec.coachChat && rec.coachChat.length > 0) {
+          cursor.update({ ...rec, coachChat: [] });
+          summaryCount++;
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    summaryReq.onerror = (e) => reject(e.target.error);
+    summaryTx.oncomplete = () => resolve();
+  });
+
+  // 2. Strip coachResponses from every analysis record
+  const analysisTx = db.transaction('analysis', 'readwrite');
+  const analysisStore = analysisTx.objectStore('analysis');
+  const analysisReq = analysisStore.openCursor();
+  let analysisCount = 0;
+
+  await new Promise((resolve, reject) => {
+    analysisReq.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        const rec = cursor.value;
+        if (rec.coachResponses && rec.coachResponses.length > 0) {
+          cursor.update({ ...rec, coachResponses: [] });
+          analysisCount++;
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    analysisReq.onerror = (e) => reject(e.target.error);
+    analysisTx.oncomplete = () => resolve();
+  });
+
+  return { summaryCount, analysisCount };
+}
+
 // Make functions available globally
 window.DB = {
   openDB,
@@ -1060,6 +1122,7 @@ window.DB = {
   getChallengeProgress,
   saveChallengeProgress,
   getChallengeProgressRange,
+  clearCoachHistory,
 };
 
 window.Skincare = {
