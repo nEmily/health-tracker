@@ -102,6 +102,14 @@ if not "!RELAY_DATES!"=="" (
             if exist "%DATA_DIR%\analysis\%%d.json.uploaded" (
                 del "%DATA_DIR%\analysis\%%d.json.uploaded" >nul 2>&1
             )
+            REM If the existing analysis JSON is corrupt, delete it so Claude does a full re-process.
+            if exist "%DATA_DIR%\analysis\%%d.json" (
+                powershell -NoProfile -Command "try { ConvertFrom-Json (Get-Content -Raw '%DATA_DIR%\analysis\%%d.json') | Out-Null; exit 0 } catch { exit 1 }"
+                if errorlevel 1 (
+                    echo [%TODAY%] Existing analysis for %%d is corrupt - deleting for full re-processing.
+                    del "%DATA_DIR%\analysis\%%d.json" >nul 2>&1
+                )
+            )
             REM Backup raw ZIP locally before any processing
             copy "%EXTRACT_DIR%\health-%%d.zip" "%BACKUP_DIR%\raw\" >nul 2>&1
             REM Extract the downloaded ZIP

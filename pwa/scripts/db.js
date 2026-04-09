@@ -402,12 +402,13 @@ async function getAnalysis(dateStr) {
 async function importAnalysis(dateStr, data) {
   const db = await openDB();
 
-  // Pre-read local supplements, moreOptions, and deletedDailies before the write transaction
-  // to avoid IDB transaction auto-commit timing issues with async get→put chains
+  // Pre-read local supplements, moreOptions, deletedDailies, and existing dailySummary before
+  // the write transaction to avoid IDB transaction auto-commit timing issues with async get→put chains.
   let localSupplements = [];
   let localMoreOptions = [];
   let deletedDailiesSet = new Set();
-  if (data.pwaProfile && (data.pwaProfile.supplements || data.pwaProfile.moreOptions)) {
+  let existingDailySummary = null;
+  if (data.pwaProfile) {
     const readTx = db.transaction('profile', 'readonly');
     const readStore = readTx.objectStore('profile');
     const [suppResult, moreResult, deletedResult] = await Promise.all([
@@ -418,6 +419,16 @@ async function importAnalysis(dateStr, data) {
     localSupplements = suppResult;
     localMoreOptions = moreResult;
     deletedDailiesSet = new Set(deletedResult);
+  }
+  // Pre-read dailySummary for dateStr if weight correction may be needed — avoids get→put
+  // race with transaction auto-commit (TransactionInactiveError).
+  if (data.weight && data.weight.corrected && typeof data.weight.value === 'number') {
+    const dsReadTx = db.transaction('dailySummary', 'readonly');
+    existingDailySummary = await new Promise(r => {
+      const req = dsReadTx.objectStore('dailySummary').get(dateStr);
+      req.onsuccess = () => r(req.result || null);
+      req.onerror = () => r(null);
+    });
   }
 
   const stores = ['analysis', 'photos', 'dailySummary'];
@@ -586,36 +597,34 @@ async function importAnalysis(dateStr, data) {
   // The processing script may auto-correct impossible values (e.g. 1028 -> 102.8 for a missing
   // decimal point). Without this, dailySummary.weight.value stays at the raw bad value and
   // the weight trend chart shows the corrupted number even after the analysis correction syncs back.
+  // existingDailySummary was pre-read before this transaction to avoid TransactionInactiveError.
   if (data.weight && data.weight.corrected && typeof data.weight.value === 'number') {
     const summaryStore = tx.objectStore('dailySummary');
-    const summaryReq = summaryStore.get(dateStr);
-    summaryReq.onsuccess = () => {
-      const existing = summaryReq.result || { date: dateStr };
-      const updated = {
-        ...existing,
-        date: dateStr,
-        weight: {
-          ...(existing.weight || {}),
-          value: data.weight.value,
-          unit: data.weight.unit || (existing.weight && existing.weight.unit) || 'lbs',
-          corrected: true,
-        },
-      };
-      // Also patch weightLog entries if present — keep them consistent
-      if (Array.isArray(updated.weightLog) && updated.weightLog.length > 0) {
-        const sorted = updated.weightLog.slice().sort((a, b) => {
-          const ta = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
-          const tb = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
-          return ta - tb;
-        });
-        // Only patch the first (earliest) entry — that's the one renderWeightTrend uses
-        if (typeof sorted[0].value === 'number' && sorted[0].value > 200) {
-          sorted[0].value = data.weight.value;
-          updated.weightLog = sorted;
-        }
-      }
-      summaryStore.put(updated);
+    const existing = existingDailySummary || { date: dateStr };
+    const updated = {
+      ...existing,
+      date: dateStr,
+      weight: {
+        ...(existing.weight || {}),
+        value: data.weight.value,
+        unit: data.weight.unit || (existing.weight && existing.weight.unit) || 'lbs',
+        corrected: true,
+      },
     };
+    // Also patch weightLog entries if present — keep them consistent
+    if (Array.isArray(updated.weightLog) && updated.weightLog.length > 0) {
+      const sorted = updated.weightLog.slice().sort((a, b) => {
+        const ta = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
+        const tb = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
+        return ta - tb;
+      });
+      // Only patch the first (earliest) entry — that's the one renderWeightTrend uses
+      if (typeof sorted[0].value === 'number' && sorted[0].value > 200) {
+        sorted[0].value = data.weight.value;
+        updated.weightLog = sorted;
+      }
+    }
+    summaryStore.put(updated);
   }
 
   // Mark meal photos for this date as processed
@@ -1087,6 +1096,8 @@ async function clearCoachHistory() {
     };
     summaryReq.onerror = (e) => reject(e.target.error);
     summaryTx.oncomplete = () => resolve();
+    summaryTx.onabort = (e) => reject(e.target.error || new Error('dailySummary clear transaction aborted'));
+    summaryTx.onerror = (e) => reject(e.target.error);
   });
 
   // 2. Strip coachResponses from every analysis record
@@ -1111,6 +1122,8 @@ async function clearCoachHistory() {
     };
     analysisReq.onerror = (e) => reject(e.target.error);
     analysisTx.oncomplete = () => resolve();
+    analysisTx.onabort = (e) => reject(e.target.error || new Error('analysis clear transaction aborted'));
+    analysisTx.onerror = (e) => reject(e.target.error);
   });
 
   return { summaryCount, analysisCount };
