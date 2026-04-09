@@ -86,19 +86,20 @@ for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "try { ($env:P
 if not "!RELAY_DATES!"=="" (
     echo [%TODAY%] Cloud relay has pending dates: !RELAY_DATES!
 
-    REM Download each pending day - relay only marks dates pending when new data is uploaded,
-    REM so always download and re-process, even if an analysis file already exists.
+    REM Download each pending day. The relay marks dates pending when the phone
+    REM uploads new data; Phase 1 will MERGE the new log.json with the existing
+    REM analysis (preserving photo analyses keyed by entry id). Do NOT delete the
+    REM existing analysis file here -- re-analyzing photos causes calorie
+    REM fluctuation on every sync. See process-day-prompt.md "Entry-Level Stability".
     for %%d in (!RELAY_DATES!) do (
         echo [%TODAY%] Downloading %%d from relay...
         curl -sf -o "%EXTRACT_DIR%\health-%%d.zip" "%HEALTH_SYNC_URL%/sync/%HEALTH_SYNC_KEY%/day/%%d"
         if not errorlevel 1 (
             set /a ZIP_COUNT+=1
             set NEW_DATES=!NEW_DATES! %%d
-            REM If an analysis file exists for this date, remove it so Claude does full re-processing.
-            REM The relay only marks a date pending when the phone uploads new data, so pending = new data = re-analyze.
-            if exist "%DATA_DIR%\analysis\%%d.json" (
-                echo [%TODAY%] Removing stale analysis for %%d - relay has newer data.
-                del "%DATA_DIR%\analysis\%%d.json" >nul 2>&1
+            REM Clear the .uploaded marker so the merged analysis gets re-uploaded after Phase 1.
+            REM Keep the analysis JSON itself -- Phase 1 reads it and merges.
+            if exist "%DATA_DIR%\analysis\%%d.json.uploaded" (
                 del "%DATA_DIR%\analysis\%%d.json.uploaded" >nul 2>&1
             )
             REM Backup raw ZIP locally before any processing
@@ -174,7 +175,7 @@ set PREFS_HASH_PATH=%DATA_DIR%\profile\preferences.json
 if exist "%EXTRACT_DIR%\profile\goals.json" set GOALS_HASH_PATH=%EXTRACT_DIR%\profile\goals.json
 if exist "%EXTRACT_DIR%\profile\preferences.json" set PREFS_HASH_PATH=%EXTRACT_DIR%\profile\preferences.json
 
-for /f "usebackq delims=" %%h in (`powershell -NoProfile -Command "$c = ''; if (Test-Path '%GOALS_HASH_PATH%') { $c += Get-Content -Raw '%GOALS_HASH_PATH%' }; if (Test-Path '%PREFS_HASH_PATH%') { $c += Get-Content -Raw '%PREFS_HASH_PATH%' }; $b = [System.Text.Encoding]::UTF8.GetBytes($c); $h = [System.Security.Cryptography.SHA256]::Create().ComputeHash($b); ($h ^| ForEach-Object { $_.ToString('x2') }) -join ''"`) do set CURRENT_HASH=%%h
+for /f "usebackq delims=" %%h in (`powershell -NoProfile -Command "$c = ''; if (Test-Path '%GOALS_HASH_PATH%') { $c += Get-Content -Raw '%GOALS_HASH_PATH%' }; if (Test-Path '%PREFS_HASH_PATH%') { $c += Get-Content -Raw '%PREFS_HASH_PATH%' }; $b = [System.Text.Encoding]::UTF8.GetBytes($c); $h = [System.Security.Cryptography.SHA256]::Create().ComputeHash($b); [System.BitConverter]::ToString($h).Replace('-','').ToLower()"`) do set CURRENT_HASH=%%h
 
 set STORED_HASH=
 if exist "%DATA_DIR%\last-plan-hash.txt" (
@@ -187,7 +188,7 @@ if not "!CURRENT_HASH!"=="!STORED_HASH!" (
 
 REM Trigger 3: User requested plan update or plan is stale due to intake/workout deviation
 if exist "%DATA_DIR%\analysis\%TODAY%.json" (
-    for /f "usebackq delims=" %%r in (`powershell -NoProfile -Command "try { $j = Get-Content -Raw '%DATA_DIR%\analysis\%TODAY%.json' ^| ConvertFrom-Json; if ($j._planRequested -eq $true -or $j._planStale -eq $true) { 'yes' } else { 'no' } } catch { 'no' }"`) do set PLAN_TRIGGER=%%r
+    for /f "usebackq delims=" %%r in (`powershell -NoProfile -Command "try { $j = ConvertFrom-Json (Get-Content -Raw '%DATA_DIR%\analysis\%TODAY%.json'); if ($j._planRequested -eq $true -or $j._planStale -eq $true) { 'yes' } else { 'no' } } catch { 'no' }"`) do set PLAN_TRIGGER=%%r
     if "!PLAN_TRIGGER!"=="yes" (
         if "!RUN_PHASE2!"=="0" echo [%TODAY%] Phase 2 trigger: plan requested or stale. >>"%DATA_DIR%\logs\%TODAY%.log"
         set RUN_PHASE2=1

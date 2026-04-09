@@ -8,8 +8,8 @@ const path = require('path');
 
 const coachDir = process.env.COACH_DIR || path.join(require('os').homedir(), 'Coach');
 const analysisDir = path.join(coachDir, 'analysis');
-// Daily data may be in a separate dir (existing installs use ~/HealthTracker)
-// or in the same dir as Coach (new installs). Check both.
+// Daily data may be in a separate dir (set via HEALTH_DATA_DIR)
+// or in the same dir as Coach (default). Check both.
 const dataDir = process.env.HEALTH_DATA_DIR || coachDir;
 const outPath = path.join(coachDir, 'conversations.md');
 

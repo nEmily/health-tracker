@@ -19,11 +19,16 @@ You are analyzing today's health data exported from the Health Tracker PWA. The 
 
 ### Entry-Level Stability (CRITICAL)
 
-Even within a single processing run, **preserve existing calorie/macro estimates for entries that haven't changed.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly.
+**Once a photo has been analyzed, never re-analyze it.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly. Photo analyses are frozen after their first pass.
 
-- If the existing analysis already has an entry with the same `id`, AND the entry in `log.json` has no `updatedAt` field (or `updatedAt` is older than the analysis file's timestamp), **copy the existing analysis entry verbatim** — do not re-analyze the photo or re-estimate calories.
-- Only analyze entries that are NEW (no matching `id` in existing analysis) or EDITED (`updatedAt` is newer than the analysis timestamp).
-- After preserving existing entries and analyzing new ones, recalculate `totals` from all entries combined.
+Merge rules when re-processing a day with an existing analysis file:
+
+- **Entry exists in both old analysis and new log.json (same `id`)** — copy the existing analysis entry verbatim: `description`, `calories`, `protein_g`, `carbs_g`, `fat_g`, etc. Do NOT re-analyze the photo, even if the entry's `updatedAt` is newer than the analysis file. `updatedAt` signals a metadata edit (notes, time, type) — the photo itself is unchanged.
+- **Entry is new (id not in old analysis)** — analyze it fully (photo + notes → nutrition estimate).
+- **Entry was deleted (id in old analysis but not in new log.json)** — drop it from the new analysis.
+- **After merging**, recalculate `totals` from the final set of entries.
+
+The only path to re-analyze a photo is: the user manually deletes the analysis file (escape hatch for bad estimates), OR they submit a correction via `corrections/{DATE}.json` (which overrides specific fields without a full re-analysis).
 
 ## Weight Typo Detection
 

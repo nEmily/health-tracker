@@ -42,7 +42,7 @@ For the duration, add a **Calculate** action:
 ### Step 4: Save to iCloud Drive
 - Add **Save File** action
   - File: the Text output from Step 3
-  - Destination: iCloud Drive → HealthTracker → sleep
+  - Destination: iCloud Drive → Coach → sleep
   - File name: `[today].json`
   - Ask Where to Save: **OFF**
 
@@ -57,11 +57,11 @@ For the duration, add a **Calculate** action:
 ## Verify
 
 After the first morning run, check:
-- Files app → iCloud Drive → HealthTracker → sleep
+- Files app → iCloud Drive → Coach → sleep
 - You should see a `YYYY-MM-DD.json` file with your sleep data
 
 ## Troubleshooting
 
 - **No sleep data**: Make sure you're wearing Apple Watch to bed or using a sleep tracking app that writes to Apple Health
 - **Permission denied**: Go to Settings → Health → Data Access → Shortcuts and enable Sleep access
-- **File not saving**: Make sure the HealthTracker/sleep folder exists in iCloud Drive
+- **File not saving**: Make sure the Coach/sleep folder exists in iCloud Drive

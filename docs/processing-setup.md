@@ -79,7 +79,7 @@ cd processing
 powershell -ExecutionPolicy Bypass -File setup-task.ps1
 ```
 
-This registers a `HealthTrackerWatcher` task that runs every 30 minutes. Verify it in Task Scheduler (`taskschd.msc`).
+This registers a `CoachWatcher` task that runs every 30 minutes. Verify it in Task Scheduler (`taskschd.msc`).
 
 ---
 

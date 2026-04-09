@@ -11,11 +11,12 @@ $watcherTrigger = New-ScheduledTaskTrigger -Once -At '00:00' -RepetitionInterval
 $watcherSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 
 # Remove old tasks if they exist
+Unregister-ScheduledTask -TaskName 'CoachWatcher' -Confirm:$false -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName 'HealthTrackerWatcher' -Confirm:$false -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName 'HealthTrackerNightly' -Confirm:$false -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName 'Health Tracker Nightly' -Confirm:$false -ErrorAction SilentlyContinue
 
-Register-ScheduledTask -TaskName 'HealthTrackerWatcher' -Action $watcherAction -Trigger $watcherTrigger -Settings $watcherSettings -Description 'Polls health relay every 30 min, processes pending data with Claude'
+Register-ScheduledTask -TaskName 'CoachWatcher' -Action $watcherAction -Trigger $watcherTrigger -Settings $watcherSettings -Description 'Polls coach relay every 30 min, processes pending data with Claude'
 
-Write-Output "Registered HealthTrackerWatcher - runs every 30 minutes."
+Write-Output "Registered CoachWatcher - runs every 30 minutes."
 Write-Output "Make sure HEALTH_SYNC_URL and HEALTH_SYNC_KEY are set as user environment variables."

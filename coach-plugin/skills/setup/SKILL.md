@@ -13,7 +13,7 @@ One-command setup that creates the Coach project folder, installs the terminal a
 
 Everything lives in the current directory (the user should `mkdir coach && cd coach` first).
 
-**IMPORTANT:** The coach folder must NOT be inside `~/.claude/` or any `.claude/` directory. Analysis files are written frequently during processing, and Claude treats `.claude/` as its own config space -- it will prompt for permission on every write. Use a top-level directory like `~/coach` or `~/HealthTracker`. If the current directory is inside `.claude/`, warn the user and suggest they move it.
+**IMPORTANT:** The coach folder must NOT be inside `~/.claude/` or any `.claude/` directory. Analysis files are written frequently during processing, and Claude treats `.claude/` as its own config space -- it will prompt for permission on every write. Use a top-level directory like `~/coach`. If the current directory is inside `.claude/`, warn the user and suggest they move it.
 
 Structure:
 

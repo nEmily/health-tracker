@@ -46,7 +46,7 @@ Fetch `$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/pending` to get the list of pendin
 
 For each pending date:
 1. Download the ZIP: `$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/day/{DATE}`
-2. If an analysis file already exists for that date, **delete it** (relay pending = new data = must re-analyze)
+2. If an analysis file already exists for that date, **keep it** -- Phase 1 will merge the new data into it, preserving calorie/macro estimates for entries whose photos have already been analyzed. Never delete an existing analysis file just because the relay has new data.
 3. Back up the raw ZIP to `$BACKUP_DIR/raw/`
 4. Extract the ZIP into `$EXTRACT_DIR`
 5. Back up the extracted data to `$BACKUP_DIR/raw/{DATE}/`
@@ -108,7 +108,7 @@ Print: `Uploaded {N} analysis file(s)` or `All results already synced`
 Print: `Done! Results will appear on your phone shortly.`
 
 ## Key rules (see prompts for full details)
-- **Never re-process dates with existing analysis** -- apply corrections only (UNLESS relay has newer data -- relay pending = re-analyze)
+- **Never re-analyze a photo that has already been analyzed.** When relay has new data for a date with existing analysis, merge: preserve existing entry analyses by `id`, analyze only new entries, drop entries whose `id` no longer exists in log.json. To force a full re-analysis, manually delete the analysis file first.
 - **Never delete raw data** -- archive instead
 - **Corrections are ground truth** -- `corrections/{DATE}.json` overrides AI estimates
 - **`fitness_checked`/`fitness_notes` in log.json = workout happened**

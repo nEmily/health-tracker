@@ -82,7 +82,7 @@ See `coach-rules.md` for the full set. Key ones for quick reference:
 
 This folder (the coach project directory) IS the data directory. Analysis files, profile, logs -- all live here. This folder must NOT be inside `~/.claude/` or any `.claude/` directory. Claude treats `.claude/` as config space and prompts for write permission on every file change, which breaks processing.
 
-If you detect this folder is inside `.claude/`, warn the user immediately and suggest relocating to `~/coach` or `~/HealthTracker`.
+If you detect this folder is inside `.claude/`, warn the user immediately and suggest relocating to `~/coach`.
 
 ## Processing
 
