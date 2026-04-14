@@ -652,8 +652,9 @@ const UI = {
           }
         }
 
-        // Mark for re-upload
+        // Mark for re-upload and request re-analysis (new photo changes the nutrition estimate)
         entry.updatedAt = new Date().toISOString();
+        entry._reanalyzeRequested = true;
         await DB.updateEntry(entry);
         CloudRelay.queueUpload(entry.date);
         UI.toast(`Photo added (${photoUrls.length} total)`);
@@ -750,11 +751,21 @@ const UI = {
         }
       }
       // Only set updatedAt if something actually changed
-      const changed = notes !== (entry.notes || '') || newDate !== oldDate || hourChanged
+      const notesChanged = notes !== (entry.notes || '');
+      const changed = notesChanged || newDate !== oldDate || hourChanged
         || (entry.type === 'workout' && updated.duration_minutes !== entry.duration_minutes)
         || (entry.type === 'weight' && updated.weight_value !== entry.weight_value);
       if (changed) {
         updated.updatedAt = new Date().toISOString();
+      }
+      // Signal re-analysis only when nutrition-affecting fields changed.
+      // Notes feed directly into the food analysis prompt, so changes must re-run the estimate.
+      // Timestamp/date/subtype changes alone do not alter the food itself -- skip re-analysis.
+      // Photo replacement is NOT a current edit path (handleAddPhotoToEntry only adds photos;
+      // that flow sets _reanalyzeRequested separately). If photo replacement is ever added,
+      // include it here.
+      if (notesChanged) {
+        updated._reanalyzeRequested = true;
       }
       try {
         await DB.updateEntry(updated);

@@ -19,16 +19,19 @@ You are analyzing today's health data exported from the Health Tracker PWA. The 
 
 ### Entry-Level Stability (CRITICAL)
 
-**Once a photo has been analyzed, never re-analyze it.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly. Photo analyses are frozen after their first pass.
+**Photo analyses are frozen after their first pass by default.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly. Exception: if the user edits a nutrition-affecting field (notes/description or replaces the photo), the PWA sets `_reanalyzeRequested: true` on the entry — those entries MUST be re-analyzed in this pass.
 
 Merge rules when re-processing a day with an existing analysis file:
 
-- **Entry exists in both old analysis and new log.json (same `id`)** — copy the existing analysis entry verbatim: `description`, `calories`, `protein_g`, `carbs_g`, `fat_g`, etc. Do NOT re-analyze the photo, even if the entry's `updatedAt` is newer than the analysis file. `updatedAt` signals a metadata edit (notes, time, type) — the photo itself is unchanged.
-- **Entry is new (id not in old analysis)** — analyze it fully (photo + notes → nutrition estimate).
+- **Entry has `_reanalyzeRequested: true` in log.json** — re-analyze it fully (photo + updated notes → fresh nutrition estimate). The user changed something that affects the calorie/macro estimate (note, description, or photo), so the old analysis is out of date. Overwrite the old analysis entry with the new one.
+- **Entry exists in both old analysis and new log.json (same `id`, no `_reanalyzeRequested`)** — copy the existing analysis entry verbatim: `description`, `calories`, `protein_g`, `carbs_g`, `fat_g`, etc. Do NOT re-analyze the photo, even if the entry's `updatedAt` is newer than the analysis file. Without `_reanalyzeRequested`, `updatedAt` signals a non-nutrition edit (time, date, subtype) — the food itself is unchanged.
+- **Entry is new (id not in old analysis)** — analyze it fully (photo + notes → nutrition estimate). This also covers the fallback case where an entry has a photo and no prior analysis entry exists (e.g., was pending when the analysis file was first written).
 - **Entry was deleted (id in old analysis but not in new log.json)** — drop it from the new analysis.
 - **After merging**, recalculate `totals` from the final set of entries.
 
-The only path to re-analyze a photo is: the user manually deletes the analysis file (escape hatch for bad estimates), OR they submit a correction via `corrections/{DATE}.json` (which overrides specific fields without a full re-analysis).
+Processing writes fresh analysis for re-analyzed entries. On the next PWA import, `analysis._importedAt` will naturally exceed the entry's `updatedAt`, clearing the "pending re-analysis" UI state. The PWA does not need processing to clear `_reanalyzeRequested` explicitly; leaving it on the entry is harmless (another re-analysis would just produce another fresh estimate).
+
+Escape hatches for re-analyzing without a user edit: the user manually deletes the analysis file, OR they submit a correction via `corrections/{DATE}.json` (which overrides specific fields without a full re-analysis).
 
 ## Weight Typo Detection
 
