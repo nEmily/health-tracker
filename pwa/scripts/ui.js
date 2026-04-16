@@ -245,6 +245,7 @@ const UI = {
     if (showAnalysis && isFood && analysisEntry.calories != null) {
       typeLabel.textContent = `${UI.entryLabel(entry.type, entry.subtype)} · ${analysisEntry.calories} cal`;
       if (analysisEntry.protein) typeLabel.textContent += ` · ${analysisEntry.protein}g protein`;
+      if (analysisEntry.fiber) typeLabel.textContent += ` · ${analysisEntry.fiber}g fiber`;
     } else {
       typeLabel.textContent = UI.entryLabel(entry.type, entry.subtype);
     }

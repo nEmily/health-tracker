@@ -1755,6 +1755,14 @@ const App = {
           <label class="form-label">Protein (crush it)</label>
           <input type="number" class="form-input" id="gs-hc-protein" value="${Number(hc.protein) || ''}" placeholder="130" inputmode="numeric">
         </div>
+        <div class="form-group">
+          <label class="form-label">Fiber (great)</label>
+          <input type="number" class="form-input" id="gs-fiber" value="${Number(goals.fiber) || ''}" placeholder="25" inputmode="numeric">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fiber (crush it)</label>
+          <input type="number" class="form-input" id="gs-hc-fiber" value="${Number(hc.fiber) || ''}" placeholder="25" inputmode="numeric">
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Water Goal (oz)</label>
@@ -1773,13 +1781,15 @@ const App = {
     document.getElementById('gs-save').addEventListener('click', async () => {
       const calories = parseInt(document.getElementById('gs-calories')?.value) || null;
       const protein = parseInt(document.getElementById('gs-protein')?.value) || null;
+      const fiber = parseInt(document.getElementById('gs-fiber')?.value) || null;
       const water_oz = parseInt(document.getElementById('gs-water')?.value) || null;
       const hcCalories = parseInt(document.getElementById('gs-hc-calories')?.value) || null;
       const hcProtein = parseInt(document.getElementById('gs-hc-protein')?.value) || null;
+      const hcFiber = parseInt(document.getElementById('gs-hc-fiber')?.value) || null;
 
       const newGoals = {
-        calories, protein, water_oz,
-        hardcore: { calories: hcCalories, protein: hcProtein, water_oz },
+        calories, protein, fiber, water_oz,
+        hardcore: { calories: hcCalories, protein: hcProtein, fiber: hcFiber, water_oz },
       };
       await DB.setProfile('goals', newGoals);
       UI.toast('Goals saved');
@@ -2033,6 +2043,7 @@ const Settings = {
       const parts = [];
       if (goals.calories) parts.push(`${goals.calories} cal`);
       if (goals.protein) parts.push(`${goals.protein}g protein`);
+      if (goals.fiber) parts.push(`${goals.fiber}g fiber`);
       if (goals.water_oz) parts.push(`${goals.water_oz} oz water`);
       el.textContent = parts.join(' \u00B7 ') || 'Not set';
     } else {

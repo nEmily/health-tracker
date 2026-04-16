@@ -156,7 +156,7 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - Identify the food items and estimate portion sizes
    - **Use WebSearch to look up actual calorie/nutrition data** for identified foods. Search for specific items (e.g. "pork belly bao calories", "salmon sashimi nutrition per oz"). Use real data from USDA, restaurant nutrition pages, or reliable nutrition databases - don't guess from memory.
    - If a photo shows a label or menu item, search for that specific product/restaurant item's published nutrition facts.
-   - Calculate calories, protein, carbs, and fat based on looked-up data and estimated portions
+   - Calculate calories, protein, carbs, fat, and fiber based on looked-up data and estimated portions
    - **Always round up / over-estimate** when uncertain - better to over-count than under-count. If a portion could be 300-400 cal, call it 400. If size is ambiguous, assume the larger portion.
    - **Never assume shared meals.** Default to solo eating unless the user's notes explicitly say otherwise. Don't halve portions because a photo shows a serving platter or tongs.
    - **Only count food on the user's plate.** Items visible in the background (e.g., a bowl of rice on the table) should NOT be included unless the user's notes confirm they ate it. Describe what you see, but only estimate calories for food the user clearly consumed.
@@ -227,16 +227,18 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
       "protein": 0,
       "carbs": 0,
       "fat": 0,
+      "fiber": 0,
       "confidence": "high|medium|low",
       "breakdown": { "item_name": { "cal": 0, "p": 0, "c": 0, "f": 0 } }
     }
   ],
-  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 },
+  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0 },
   "goals": {
     "calories": { "target": 0, "actual": 0, "remaining": 0, "status": "under|over|on_track" },
     "protein": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
     "carbs": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
     "fat": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
+    "fiber": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
     "water": { "target_oz": 0, "actual_oz": 0, "status": "..." }
   },
   "highlights": ["..."],

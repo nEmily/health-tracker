@@ -14,13 +14,14 @@ const DayScore = {
     const regimen = preloaded?.regimen ?? await DB.getRegimen();
 
     const hc = goals.hardcore || {};
-    const moderate = { calories: goals.calories || 2000, protein: goals.protein || 100, water_oz: goals.water_oz || 64 };
-    const hardcore = { calories: hc.calories || 1500, protein: hc.protein || 130, water_oz: hc.water_oz || 64 };
+    const moderate = { calories: goals.calories || 2000, protein: goals.protein || 100, water_oz: goals.water_oz || 64, fiber: goals.fiber || 25 };
+    const hardcore = { calories: hc.calories || 1500, protein: hc.protein || 130, water_oz: hc.water_oz || 64, fiber: hc.fiber || goals.fiber || 25 };
 
     // Get actuals — prefer analysis data, fall back to entry counting
     const totals = analysis?.totals || {};
     const calActual = totals.calories || 0;
     const proteinActual = totals.protein || 0;
+    const fiberActual = totals.fiber || 0;
     const waterActual = summary.water_oz || 0;
     const hasAnalysis = !!analysis;
 
@@ -49,8 +50,8 @@ const DayScore = {
     );
 
     // --- Score calculation ---
-    const scoreModerate = DayScore._calc(calActual, proteinActual, waterActual, moderate, hasAnalysis, meals, isWorkoutDay, didWorkout, drinkCount, didStrengthOnCardioDay);
-    const scoreHardcore = DayScore._calc(calActual, proteinActual, waterActual, hardcore, hasAnalysis, meals, isWorkoutDay, didWorkout, drinkCount, didStrengthOnCardioDay);
+    const scoreModerate = DayScore._calc(calActual, proteinActual, fiberActual, waterActual, moderate, hasAnalysis, meals, isWorkoutDay, didWorkout, drinkCount, didStrengthOnCardioDay);
+    const scoreHardcore = DayScore._calc(calActual, proteinActual, fiberActual, waterActual, hardcore, hasAnalysis, meals, isWorkoutDay, didWorkout, drinkCount, didStrengthOnCardioDay);
 
     return {
       moderate: scoreModerate,
@@ -60,7 +61,7 @@ const DayScore = {
     };
   },
 
-  _calc(calActual, proteinActual, waterActual, goals, hasAnalysis, meals, isWorkoutDay, didWorkout, drinkCount, didStrengthOnCardioDay) {
+  _calc(calActual, proteinActual, fiberActual, waterActual, goals, hasAnalysis, meals, isWorkoutDay, didWorkout, drinkCount, didStrengthOnCardioDay) {
     let score = 0;
     const breakdown = {};
 
@@ -84,6 +85,16 @@ const DayScore = {
       breakdown.protein = pts;
     } else {
       breakdown.protein = null;
+    }
+
+    // Fiber (10 pts) — proportional to target
+    if (hasAnalysis && fiberActual > 0) {
+      const pct = Math.min(1, fiberActual / goals.fiber);
+      const pts = Math.round(pct * 10);
+      score += pts;
+      breakdown.fiber = pts;
+    } else {
+      breakdown.fiber = null;
     }
 
     // Workout (25 pts)
@@ -119,7 +130,7 @@ const DayScore = {
       breakdown.vices = -penalty;
     }
 
-    score = Math.max(0, Math.min(105, score));
+    score = Math.max(0, Math.min(115, score));
 
     return { score, breakdown };
   },
@@ -195,6 +206,7 @@ const DayScore = {
     const chips = [];
     if (bd.calories != null) chips.push({ label: 'Cal', pts: bd.calories, max: 25 });
     if (bd.protein != null) chips.push({ label: 'Protein', pts: bd.protein, max: 25 });
+    if (bd.fiber != null) chips.push({ label: 'Fiber', pts: bd.fiber, max: 10 });
     chips.push({ label: bd._isRest ? 'Rest' : 'Workout', pts: bd.workout, max: 25 });
     chips.push({ label: 'Water', pts: bd.water, max: 10 });
     chips.push({ label: 'Logged', pts: bd.logging, max: 15 });

@@ -10,6 +10,9 @@ cd C:\Users\emily\projects\health-tracker
 # Phase 1: Static checks (fast, no browser)
 for f in pwa/scripts/*.js pwa/sw.js; do node --check "$f" 2>&1; done
 node coach-plugin/generate-sdk.js && git diff --exit-code coach-plugin/coach-sdk.md || echo "FAIL: coach-sdk.md is stale — run node coach-plugin/generate-sdk.js and commit the result"
+diff -u processing/process-day-prompt.md coach-plugin/scripts/process-day-prompt.md > /dev/null && echo "prompt drift: OK" || echo "FAIL: processing/process-day-prompt.md and coach-plugin/scripts/process-day-prompt.md have diverged — sync them"
+diff -u processing/plan-prompt.md coach-plugin/scripts/plan-prompt.md > /dev/null 2>&1 && echo "plan-prompt drift: OK" || echo "WARN: plan-prompt.md files differ or one is missing — review"
+for f in processing/process-day.bat processing/process-day.sh coach-plugin/scripts/process-day.bat coach-plugin/scripts/process-day.sh; do claude_calls=$(grep -c 'claude -p' "$f"); model_flags=$(grep -c -- '--model' "$f"); [ "$claude_calls" = "$model_flags" ] || echo "FAIL: $f has $claude_calls claude -p call(s) but $model_flags --model flag(s) — missing pin risks silent Opus upgrade"; done; echo "model pin check done"
 
 # Phase 2: Playwright tests (server starts automatically, no manual setup)
 node test-fixtures/run-tests.js --screenshots
@@ -41,6 +44,8 @@ node test-fixtures/chaos.js --rounds 50 --screenshots
    ```
    If it differs: FAIL — "coach-sdk.md is stale — run `node coach-plugin/generate-sdk.js` and commit the result"
 6. **Plugin agent reference**: Verify `settings.json` agent value uses the fully qualified `plugin-name:agent-name` format (e.g., `coach:coach`, not just `coach`). The plugin system registers agents as `plugin:agent` — a bare name silently fails to activate.
+7. **Processing prompt drift**: `processing/process-day-prompt.md` and `coach-plugin/scripts/process-day-prompt.md` must be byte-identical. The plugin ships a mirror copy for standalone installs; drift between the two means downstream users (including Michael) are running a stale prompt. Fix: copy `processing/process-day-prompt.md` over the plugin version, or vice versa depending on which is canonical for the change. Same check applies to `plan-prompt.md`.
+8. **Cron model pin**: every `claude -p` call in `processing/*.{bat,sh}` and `coach-plugin/scripts/*.{bat,sh}` must include `--model sonnet` (or equivalent). Missing flag means the scheduled task falls back to the CLI default, which can silently upgrade to Opus on plan changes — blows up token costs.
 
 ## Phase 2 — Playwright Regression Tests
 

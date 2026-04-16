@@ -136,16 +136,18 @@ Canonical output written to `analysis/YYYY-MM-DD.json` by processing. Do not han
       "protein": 0,
       "carbs": 0,
       "fat": 0,
+      "fiber": 0,
       "confidence": "high|medium|low",
       "breakdown": { "item_name": { "cal": 0, "p": 0, "c": 0, "f": 0 } }
     }
   ],
-  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 },
+  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0 },
   "goals": {
     "calories": { "target": 0, "actual": 0, "remaining": 0, "status": "under|over|on_track" },
     "protein": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
     "carbs": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
     "fat": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
+    "fiber": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
     "water": { "target_oz": 0, "actual_oz": 0, "status": "..." }
   },
   "highlights": ["..."],
