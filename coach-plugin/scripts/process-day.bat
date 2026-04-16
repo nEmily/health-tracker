@@ -154,7 +154,7 @@ echo [%TODAY%] Processing !ZIP_COUNT! new days of data...
 
 REM --- Run Claude Code to process extracted data ---
 echo [%TODAY%] Running Claude Code analysis...
-call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found." --allowedTools "Read,Write,Glob,Grep,Bash,WebSearch,WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found." --dangerously-skip-permissions >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
 
 echo MARKER:claude-done >>"%DATA_DIR%\logs\%TODAY%.log"
 if errorlevel 1 (
@@ -227,7 +227,7 @@ if not exist "%DATA_DIR%\analysis\%TODAY%.json" (
 
 REM --- Run Phase 2: Plan Generation ---
 echo [%TODAY%] Running Phase 2: plan generation... >>"%DATA_DIR%\logs\%TODAY%.log"
-call claude -p "Generate the meal plan and workout regimen for %TODAY%. The data root is %DATA_DIR%. The extracted data is at %EXTRACT_DIR%. Follow the instructions in %REPO_DIR%\processing\plan-prompt.md." --allowedTools "Read,Write,Glob,Grep,Bash,WebSearch,WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+call claude -p "Generate the meal plan and workout regimen for %TODAY%. The data root is %DATA_DIR%. The extracted data is at %EXTRACT_DIR%. Follow the instructions in %REPO_DIR%\processing\plan-prompt.md." --dangerously-skip-permissions >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
 set PHASE2_EXIT=!ERRORLEVEL!
 echo MARKER:phase2-done >>"%DATA_DIR%\logs\%TODAY%.log"
 if !PHASE2_EXIT! neq 0 (
