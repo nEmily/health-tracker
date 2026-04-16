@@ -29,6 +29,84 @@ else
     exit 1
 fi
 LOCK_FILE="$DATA_DIR/processing.lock"
+RATE_LIMIT_FILE="$DATA_DIR/.rate-limit-until"
+TODAY=$(date +%Y-%m-%d)
+
+# Rate-limit skip check — runs BEFORE lock acquisition and network calls.
+# Corrupt/unparseable file => treat as not rate-limited and remove.
+if [ -f "$RATE_LIMIT_FILE" ]; then
+    RL_UNTIL_STR=$(tr -d '[:space:]' < "$RATE_LIMIT_FILE" 2>/dev/null || echo '')
+    if [ -n "$RL_UNTIL_STR" ]; then
+        RL_UNTIL_EPOCH=$(date -d "$RL_UNTIL_STR" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "$RL_UNTIL_STR" +%s 2>/dev/null || echo 0)
+        NOW_EPOCH=$(date +%s)
+        if [ "$RL_UNTIL_EPOCH" -gt 0 ] && [ "$NOW_EPOCH" -lt "$RL_UNTIL_EPOCH" ]; then
+            echo "[watcher] Rate limit active until $RL_UNTIL_STR. Skipping."
+            exit 0
+        fi
+    fi
+    rm -f "$RATE_LIMIT_FILE"
+    echo "[watcher] Rate limit window has passed (or file unparseable). Resuming."
+fi
+
+# Post-processing: scan the processing log for rate-limit messages and, if
+# found, write $RATE_LIMIT_FILE and send a Discord alert. Never fails the
+# watcher due to notification issues.
+check_rate_limit() {
+    local proc_log="$DATA_DIR/logs/$TODAY.log"
+    local start_offset="${1:-0}"
+    [ -f "$proc_log" ] || return 0
+    local tail_out
+    # Read only bytes produced during this run so we don't match older entries.
+    tail_out=$(tail -c +$((start_offset + 1)) "$proc_log" 2>/dev/null || echo '')
+    if ! echo "$tail_out" | grep -qiE 'hit your limit|out of extra usage'; then
+        return 0
+    fi
+
+    local reset_match raw_hour ampm hour24 now_hour reset_ymd reset_epoch iso display
+    reset_match=$(echo "$tail_out" | grep -oiE 'resets[[:space:]]+[0-9]{1,2}(am|pm)' | head -n 1 || true)
+    if [ -n "$reset_match" ]; then
+        raw_hour=$(echo "$reset_match" | grep -oE '[0-9]{1,2}')
+        ampm=$(echo "$reset_match" | grep -oiE '(am|pm)' | tr '[:upper:]' '[:lower:]')
+        # 12am=0, 1am-11am=1-11, 12pm=12, 1pm-11pm=13-23
+        if [ "$ampm" = "am" ]; then
+            if [ "$raw_hour" = "12" ]; then hour24=0; else hour24=$raw_hour; fi
+        else
+            if [ "$raw_hour" = "12" ]; then hour24=12; else hour24=$(( 10#$raw_hour + 12 )); fi
+        fi
+        now_hour=$(date +%H); now_hour=${now_hour#0}
+        # Strip leading zero so arithmetic treats it as decimal
+        : "${now_hour:=0}"
+        if [ "$hour24" -le "$now_hour" ]; then
+            reset_ymd=$(date -v+1d +%Y-%m-%d 2>/dev/null || date -d "tomorrow" +%Y-%m-%d 2>/dev/null || echo "$TODAY")
+        else
+            reset_ymd="$TODAY"
+        fi
+        iso=$(printf "%sT%02d:00:00" "$reset_ymd" "$hour24")
+    else
+        # Defensive fallback: no reset clause, assume 3 hours
+        iso=$(date -d "+3 hours" +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -v+3H +%Y-%m-%dT%H:%M:%S 2>/dev/null || date +%Y-%m-%dT%H:%M:%S)
+    fi
+
+    echo "$iso" > "$RATE_LIMIT_FILE"
+    echo "[watcher] Rate limit detected. Pausing until $iso."
+
+    local webhook_file="$HOME/.claude/discord-webhook.txt"
+    if [ ! -f "$webhook_file" ]; then
+        echo "[watcher] Discord webhook file not found at $webhook_file. Skipping notification."
+        return 0
+    fi
+    display=$(echo "$iso" | sed -E 's/.*T([0-9]{2}):([0-9]{2}).*/\1:\2/')
+    local webhook_url
+    webhook_url=$(tr -d '[:space:]' < "$webhook_file")
+    local desc="Claude Code hit the usage limit. Next run will resume after ${display}. No analysis was produced this cycle."
+    local payload
+    payload=$(cat <<EOF
+{"username":"worker: health-tracker","embeds":[{"title":"Coach processing paused — rate limit","description":"$(echo "$desc" | sed 's/"/\\"/g')","color":15105570,"footer":{"text":"from: watcher"}}]}
+EOF
+)
+    curl -s -X POST -H "Content-Type: application/json" --data "$payload" "$webhook_url" >/dev/null 2>&1 || \
+        echo "[watcher] Discord send failed (non-fatal)."
+}
 
 # Lock file check with stale detection (>60 min)
 if [ -f "$LOCK_FILE" ]; then
@@ -60,6 +138,13 @@ fi
 
 echo "[watcher] Pending dates: $PENDING. Launching processing..."
 
+PROC_LOG_PATH="$DATA_DIR/logs/$TODAY.log"
+LOG_OFFSET_BEFORE=$([ -f "$PROC_LOG_PATH" ] && wc -c < "$PROC_LOG_PATH" | tr -d ' ' || echo 0)
+
 PROCESS_SCRIPT="$SCRIPT_DIR/process-day.sh"
-CLAUDECODE="" bash "$PROCESS_SCRIPT"
+CLAUDECODE="" bash "$PROCESS_SCRIPT" || true
 echo "[watcher] Processing finished."
+
+# Scan only the new log content from this run — prior runs today may have logged
+# rate-limit strings that would otherwise trigger false positives.
+check_rate_limit "$LOG_OFFSET_BEFORE"
