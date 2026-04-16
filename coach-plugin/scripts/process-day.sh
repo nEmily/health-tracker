@@ -137,6 +137,7 @@ echo "[$TODAY] Processing $ZIP_COUNT new days of data..."
 # --- Run Claude Code to process extracted data ---
 echo "[$TODAY] Running Claude Code analysis..."
 CLAUDECODE="" claude -p "Process the health data that has been extracted to $EXTRACT_DIR. Today is $TODAY. The data root is $DATA_DIR. Follow the instructions in $REPO_DIR/processing/process-day-prompt.md. There may be data from multiple days - process each day found." \
+    --model sonnet \
     --dangerously-skip-permissions \
     >> "$DATA_DIR/logs/$TODAY.log" 2>&1 || echo "[$TODAY] WARNING: Claude Code exited with an error. Check log: $DATA_DIR/logs/$TODAY.log"
 
@@ -202,6 +203,7 @@ if [ "$RUN_PHASE2" = "1" ]; then
     if [ -f "$DATA_DIR/analysis/$TODAY.json" ]; then
         echo "[$TODAY] Running Phase 2: plan generation..."
         CLAUDECODE="" claude -p "Generate the meal plan and workout regimen for $TODAY. The data root is $DATA_DIR. The extracted data is at $EXTRACT_DIR. Follow the instructions in $REPO_DIR/processing/plan-prompt.md." \
+            --model sonnet \
             --dangerously-skip-permissions \
             >> "$DATA_DIR/logs/$TODAY.log" 2>&1 \
             && {

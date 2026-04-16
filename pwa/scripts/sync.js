@@ -29,10 +29,12 @@ const Sync = {
           fat: { grams: 70, priority: 'low' },
         },
         water: { daily_oz: goals.water_oz || 64 },
+        fiber: { daily_g: goals.fiber || 25 },
         hardcore: {
           calories: { daily: hc.calories || 1500 },
           macros: { protein: { grams: hc.protein || 130 } },
           water: { daily_oz: hc.water_oz || 64 },
+          fiber: { daily_g: hc.fiber || goals.fiber || 25 },
         },
       }, null, 2);
       files.push({ name: `profile/goals.json`, data: new TextEncoder().encode(goalsJson) });

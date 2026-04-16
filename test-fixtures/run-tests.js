@@ -6415,6 +6415,13 @@ async function testWeightEntryIndependence(page, fixtures) {
 async function testWeightEntryEdit(page, fixtures) {
   console.log('\n--- Weight Entry Tap-to-Edit ---');
 
+  // KNOWN FLAKE: this test intermittently fails with
+  // "page.waitForTimeout: Target page, context or browser has been closed"
+  // at the first waitForTimeout after App.goToDate. Root cause unknown —
+  // likely browser memory pressure after 600+ prior assertions. safeRun()
+  // in run() now isolates this failure so downstream tests still execute
+  // instead of being masked behind a single FATAL.
+
   // Verify weight entries in the timeline can be tapped to open the edit modal,
   // and that saving edits updates both the entry and the daily summary.
   // The stat card always opens QuickLog for a new weight entry (not edit).
@@ -7926,6 +7933,20 @@ async function testChaosInsights(page, context, fixtures) {
   }, fixtures);
 }
 
+// Isolate each test so a FATAL in one doesn't mask downstream assertions.
+// Without this, a single browser crash (e.g. the intermittent flake in
+// testWeightEntryEdit) aborts the whole suite and hides 300+ later tests.
+async function safeRun(fn, ...args) {
+  const name = fn.name || 'anonymous';
+  try {
+    await fn(...args);
+  } catch (err) {
+    console.error(`\nFATAL in ${name}: ${err.message}`);
+    failed++;
+    errors.push(`Fatal in ${name}: ${err.message}`);
+  }
+}
+
 async function run() {
   console.log('=== Health Tracker Validation ===\n');
 
@@ -7966,48 +7987,48 @@ async function run() {
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
 
-    // Run test suites
-    await testTodayScreen(page, fixtures);
-    await testPlanScreen(page, fixtures);
-    await testProgressScreen(page, fixtures);
-    await testProfileScreen(page, fixtures);
-    await testInteractions(page, fixtures);
-    await testScoring(page, fixtures);
-    await testEntryTypes(page, fixtures);
-    await testPhotos(page, fixtures);
-    await testPhotoComprehensive(page, fixtures);
-    await testMultiPhotoEntry(page, fixtures);
-    await testUserFlows(page, fixtures);
-    await testFixtureSchema(fixtures);
-    await testProfileRoundTrip(page, fixtures);
-    await testAnalysisStatusIndicators(page, fixtures);
-    await testUILabels(page, fixtures);
-    await testScoreCentering(page, fixtures);
-    await testMultiViewport(page, context, fixtures);
-    await testBugRegressions(page, fixtures);
-    await testSkincarePanel(page, fixtures);
-    await testFitnessPanel(page, fixtures);
-    await testDailiesManager(page, fixtures);
-    await testDailiesDeletionPersists(page, fixtures);
-    await testVisualQA(page, fixtures);
-    await testVisualQA320(page, context, fixtures);
-    await testChallenges(page, context, fixtures);
-    await testChallengeConfirmationFlow(page, context, fixtures);
-    await testChallengeCustomBuilder(page, context, fixtures);
-    await testSkincareOnboarding(page, context, fixtures);
-    await testMultiUserGeneralization(page, context, fixtures);
-    await testPhotoComparison(page, context, fixtures);
+    // Run test suites — each isolated so one fatal doesn't cascade.
+    await safeRun(testTodayScreen, page, fixtures);
+    await safeRun(testPlanScreen, page, fixtures);
+    await safeRun(testProgressScreen, page, fixtures);
+    await safeRun(testProfileScreen, page, fixtures);
+    await safeRun(testInteractions, page, fixtures);
+    await safeRun(testScoring, page, fixtures);
+    await safeRun(testEntryTypes, page, fixtures);
+    await safeRun(testPhotos, page, fixtures);
+    await safeRun(testPhotoComprehensive, page, fixtures);
+    await safeRun(testMultiPhotoEntry, page, fixtures);
+    await safeRun(testUserFlows, page, fixtures);
+    await safeRun(testFixtureSchema, fixtures);
+    await safeRun(testProfileRoundTrip, page, fixtures);
+    await safeRun(testAnalysisStatusIndicators, page, fixtures);
+    await safeRun(testUILabels, page, fixtures);
+    await safeRun(testScoreCentering, page, fixtures);
+    await safeRun(testMultiViewport, page, context, fixtures);
+    await safeRun(testBugRegressions, page, fixtures);
+    await safeRun(testSkincarePanel, page, fixtures);
+    await safeRun(testFitnessPanel, page, fixtures);
+    await safeRun(testDailiesManager, page, fixtures);
+    await safeRun(testDailiesDeletionPersists, page, fixtures);
+    await safeRun(testVisualQA, page, fixtures);
+    await safeRun(testVisualQA320, page, context, fixtures);
+    await safeRun(testChallenges, page, context, fixtures);
+    await safeRun(testChallengeConfirmationFlow, page, context, fixtures);
+    await safeRun(testChallengeCustomBuilder, page, context, fixtures);
+    await safeRun(testSkincareOnboarding, page, context, fixtures);
+    await safeRun(testMultiUserGeneralization, page, context, fixtures);
+    await safeRun(testPhotoComparison, page, context, fixtures);
     await page.waitForTimeout(500); // Allow renderer to settle after photo blob operations
-    await testWeightTrendSmoothing(page, fixtures);
-    await testAdaptiveCalorieTargets(page, fixtures);
-    await testWeightEntryIndependence(page, fixtures);
-    await testWeightEntryEdit(page, fixtures);
-    await testLongTextInput(page, fixtures);
-    await testSettingUpdatesImport(page, fixtures);
-    await testInsightRenders(page, fixtures);
-    await testChaosInsights(page, context, fixtures);
+    await safeRun(testWeightTrendSmoothing, page, fixtures);
+    await safeRun(testAdaptiveCalorieTargets, page, fixtures);
+    await safeRun(testWeightEntryIndependence, page, fixtures);
+    await safeRun(testWeightEntryEdit, page, fixtures);
+    await safeRun(testLongTextInput, page, fixtures);
+    await safeRun(testSettingUpdatesImport, page, fixtures);
+    await safeRun(testInsightRenders, page, fixtures);
+    await safeRun(testChaosInsights, page, context, fixtures);
     // voice logging removed — not a priority
-    await testConsoleErrors(page);
+    await safeRun(testConsoleErrors, page);
 
   } catch (err) {
     console.error('\nFATAL:', err.message);

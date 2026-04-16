@@ -19,16 +19,19 @@ You are analyzing today's health data exported from the Health Tracker PWA. The 
 
 ### Entry-Level Stability (CRITICAL)
 
-**Once a photo has been analyzed, never re-analyze it.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly. Photo analyses are frozen after their first pass.
+**Photo analyses are frozen after their first pass by default.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly. Exception: if the user edits a nutrition-affecting field (notes/description or replaces the photo), the PWA sets `_reanalyzeRequested: true` on the entry — those entries MUST be re-analyzed in this pass.
 
 Merge rules when re-processing a day with an existing analysis file:
 
-- **Entry exists in both old analysis and new log.json (same `id`)** — copy the existing analysis entry verbatim: `description`, `calories`, `protein_g`, `carbs_g`, `fat_g`, etc. Do NOT re-analyze the photo, even if the entry's `updatedAt` is newer than the analysis file. `updatedAt` signals a metadata edit (notes, time, type) — the photo itself is unchanged.
-- **Entry is new (id not in old analysis)** — analyze it fully (photo + notes → nutrition estimate).
+- **Entry has `_reanalyzeRequested: true` in log.json** — re-analyze it fully (photo + updated notes → fresh nutrition estimate). The user changed something that affects the calorie/macro estimate (note, description, or photo), so the old analysis is out of date. Overwrite the old analysis entry with the new one.
+- **Entry exists in both old analysis and new log.json (same `id`, no `_reanalyzeRequested`)** — copy the existing analysis entry verbatim: `description`, `calories`, `protein_g`, `carbs_g`, `fat_g`, etc. Do NOT re-analyze the photo, even if the entry's `updatedAt` is newer than the analysis file. Without `_reanalyzeRequested`, `updatedAt` signals a non-nutrition edit (time, date, subtype) — the food itself is unchanged.
+- **Entry is new (id not in old analysis)** — analyze it fully (photo + notes → nutrition estimate). This also covers the fallback case where an entry has a photo and no prior analysis entry exists (e.g., was pending when the analysis file was first written).
 - **Entry was deleted (id in old analysis but not in new log.json)** — drop it from the new analysis.
 - **After merging**, recalculate `totals` from the final set of entries.
 
-The only path to re-analyze a photo is: the user manually deletes the analysis file (escape hatch for bad estimates), OR they submit a correction via `corrections/{DATE}.json` (which overrides specific fields without a full re-analysis).
+Processing writes fresh analysis for re-analyzed entries. On the next PWA import, `analysis._importedAt` will naturally exceed the entry's `updatedAt`, clearing the "pending re-analysis" UI state. The PWA does not need processing to clear `_reanalyzeRequested` explicitly; leaving it on the entry is harmless (another re-analysis would just produce another fresh estimate).
+
+Escape hatches for re-analyzing without a user edit: the user manually deletes the analysis file, OR they submit a correction via `corrections/{DATE}.json` (which overrides specific fields without a full re-analysis).
 
 ## Weight Typo Detection
 
@@ -153,7 +156,7 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - Identify the food items and estimate portion sizes
    - **Use WebSearch to look up actual calorie/nutrition data** for identified foods. Search for specific items (e.g. "pork belly bao calories", "salmon sashimi nutrition per oz"). Use real data from USDA, restaurant nutrition pages, or reliable nutrition databases - don't guess from memory.
    - If a photo shows a label or menu item, search for that specific product/restaurant item's published nutrition facts.
-   - Calculate calories, protein, carbs, and fat based on looked-up data and estimated portions
+   - Calculate calories, protein, carbs, fat, and fiber based on looked-up data and estimated portions
    - **Always round up / over-estimate** when uncertain - better to over-count than under-count. If a portion could be 300-400 cal, call it 400. If size is ambiguous, assume the larger portion.
    - **Never assume shared meals.** Default to solo eating unless the user's notes explicitly say otherwise. Don't halve portions because a photo shows a serving platter or tongs.
    - **Only count food on the user's plate.** Items visible in the background (e.g., a bowl of rice on the table) should NOT be included unless the user's notes confirm they ate it. Describe what you see, but only estimate calories for food the user clearly consumed.
@@ -224,16 +227,18 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
       "protein": 0,
       "carbs": 0,
       "fat": 0,
+      "fiber": 0,
       "confidence": "high|medium|low",
       "breakdown": { "item_name": { "cal": 0, "p": 0, "c": 0, "f": 0 } }
     }
   ],
-  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 },
+  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0 },
   "goals": {
     "calories": { "target": 0, "actual": 0, "remaining": 0, "status": "under|over|on_track" },
     "protein": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
     "carbs": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
     "fat": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
+    "fiber": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
     "water": { "target_oz": 0, "actual_oz": 0, "status": "..." }
   },
   "highlights": ["..."],

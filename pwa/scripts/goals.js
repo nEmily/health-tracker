@@ -162,7 +162,7 @@ const GoalsView = {
         macros[name] = { actual: m.grams, goal: m.goal };
       }
     } else if (a.totals) {
-      for (const name of ['protein', 'carbs', 'fat']) {
+      for (const name of ['protein', 'carbs', 'fat', 'fiber']) {
         if (a.totals[name] != null) {
           macros[name] = {
             actual: a.totals[name],
@@ -258,13 +258,14 @@ const GoalsView = {
       const cal = entry.type === 'workout' ? `${entry.calories_burned || (entry.calories ? Math.abs(entry.calories) : '?')} cal burned` :
                   `${entry.calories || 0} cal`;
       const protein = entry.type !== 'workout' && entry.protein ? ` \u00B7 ${entry.protein}g protein` : '';
+      const fiber = entry.type !== 'workout' && entry.fiber ? ` \u00B7 ${entry.fiber}g fiber` : '';
 
       html += `
         <div style="padding:var(--space-xs) 0; border-bottom:1px solid var(--border-color);">
           <div style="display:flex; justify-content:space-between; align-items:baseline;">
             <span style="font-size:var(--text-sm);">${UI.escapeHtml(entry.description || entry.notes || entry.type)}</span>
           </div>
-          <div style="font-size:var(--text-xs); color:var(--text-muted);">${cal}${protein}${entry.confidence ? ' \u00B7 ' + entry.confidence + ' confidence' : ''}</div>
+          <div style="font-size:var(--text-xs); color:var(--text-muted);">${cal}${protein}${fiber}${entry.confidence ? ' \u00B7 ' + entry.confidence + ' confidence' : ''}</div>
         </div>
       `;
     }
@@ -275,7 +276,7 @@ const GoalsView = {
       html += `
         <div style="padding-top:var(--space-sm); font-weight:600; font-size:var(--text-sm); display:flex; justify-content:space-between;">
           <span>Total</span>
-          <span>${t.calories} cal \u00B7 ${t.protein}g protein \u00B7 ${t.carbs}g carbs \u00B7 ${t.fat}g fat</span>
+          <span>${t.calories} cal \u00B7 ${t.protein}g protein \u00B7 ${t.carbs}g carbs \u00B7 ${t.fat}g fat${t.fiber != null ? ` \u00B7 ${t.fiber}g fiber` : ''}</span>
         </div>
       `;
     }
@@ -362,12 +363,13 @@ const GoalsView = {
         const isWorkout = entry.type === 'workout';
         const calText = isWorkout ? `${entry.calories_burned || (entry.calories ? Math.abs(entry.calories) : '?')} burned` : `${entry.calories || 0} cal`;
         const proteinText = !isWorkout && entry.protein ? ` \u00B7 ${entry.protein}g P` : '';
+        const fiberText = !isWorkout && entry.fiber ? ` \u00B7 ${entry.fiber}g fiber` : '';
         const icon = isWorkout ? '\u{1F3CB}' : (entry.type === 'drink' ? '\u{1F375}' : '\u{1F374}');
         const desc = entry.description || entry.notes || entry.type;
         html += `
           <div style="padding:6px 0; border-bottom:1px solid var(--border-color);">
             <div style="display:flex; justify-content:space-between; align-items:baseline;">
-              <span style="font-size:var(--text-sm); font-weight:500;">${icon} ${calText}${proteinText}</span>
+              <span style="font-size:var(--text-sm); font-weight:500;">${icon} ${calText}${proteinText}${fiberText}</span>
             </div>
             <div style="font-size:var(--text-xs); color:var(--text-muted); margin-top:2px;">${UI.escapeHtml(desc)}</div>
           </div>
@@ -375,7 +377,7 @@ const GoalsView = {
       }
       if (a.totals) {
         html += `<div style="display:flex; justify-content:space-between; padding-top:var(--space-xs); font-weight:600; font-size:var(--text-xs);">
-          <span>Total</span><span>${a.totals.calories} cal \u00B7 ${a.totals.protein}g P</span>
+          <span>Total</span><span>${a.totals.calories} cal \u00B7 ${a.totals.protein}g P${a.totals.fiber != null ? ` \u00B7 ${a.totals.fiber}g fiber` : ''}</span>
         </div>`;
       }
       html += '</div>';
