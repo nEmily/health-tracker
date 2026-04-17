@@ -1132,15 +1132,21 @@ const App = {
           const todayPlan = mealPlan.days.find(d => d.date === date);
           const dinner = todayPlan?.meals?.find(m => (m.meal || '').toLowerCase().includes('dinner')) || todayPlan?.meals?.[todayPlan.meals.length - 1];
           if (dinner) {
-            const allMealsHtml = todayPlan.meals.map(m => `
-              <div style="padding:var(--space-sm) 0; border-bottom:1px solid var(--border-color);">
-                <div style="display:flex; justify-content:space-between;">
-                  <span style="font-weight:500; font-size:var(--text-sm); text-transform:capitalize;">${UI.escapeHtml(m.meal || m.name)}</span>
-                  <span style="font-size:var(--text-xs); color:var(--text-muted);">${m.calories} cal - ${m.protein}g P</span>
+            const allMealsHtml = todayPlan.meals.map(m => {
+              const ingredientsHtml = UI.renderIngredientList(m.ingredients);
+              const fiberText = m.fiber ? `, ${m.fiber}g F` : '';
+              const prepText = m.prep_time ? ` - ${UI.escapeHtml(m.prep_time)}` : '';
+              return `
+                <div style="padding:var(--space-sm) 0; border-bottom:1px solid var(--border-color);">
+                  <div style="display:flex; justify-content:space-between;">
+                    <span style="font-weight:500; font-size:var(--text-sm); text-transform:capitalize;">${UI.escapeHtml(m.meal || m.name)}</span>
+                    <span style="font-size:var(--text-xs); color:var(--text-muted);">${m.calories} cal - ${m.protein}g P${fiberText}${prepText}</span>
+                  </div>
+                  <div style="font-size:var(--text-xs); color:var(--text-secondary);">${UI.escapeHtml(m.name || '')}</div>
+                  ${ingredientsHtml}
                 </div>
-                <div style="font-size:var(--text-xs); color:var(--text-secondary);">${UI.escapeHtml(m.name || '')}</div>
-              </div>
-            `).join('');
+              `;
+            }).join('');
             mealSuggEl.innerHTML = `
               <div class="collapsible-section" style="margin-top:var(--space-sm);">
                 <div class="collapsible-header" id="meal-collapse-header">
