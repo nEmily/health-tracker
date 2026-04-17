@@ -17,6 +17,12 @@ for f in processing/process-day.bat processing/process-day.sh coach-plugin/scrip
 # Phase 2: Playwright tests (server starts automatically, no manual setup)
 node test-fixtures/run-tests.js --screenshots
 
+# Phase 2.1: Visual verification of meal plan ingredient rendering
+# Catches cases where PWA surfaces don't render a newly-added schema
+# field (e.g. PR #37 shipped ingredient rendering to the wrong screen).
+# This script MUST pass before any change to meal plan / ingredient UI ships.
+node test-fixtures/screenshot-meal-suggestion.js
+
 # Phase 2.5: AI Visual QA (read screenshots, evaluate visually — see below)
 # No command — Claude Code reads .claude/test-screenshots/ PNGs and evaluates them
 
