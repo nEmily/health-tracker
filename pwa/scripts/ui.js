@@ -146,6 +146,45 @@ const UI = {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   },
 
+  // Render a structured ingredient list from a meal.ingredients[] array.
+  // Each ingredient: { name, grams, cups?, tsp?, tbsp?, oz?, count?, cal?, protein?, fiber?, fat? }
+  // Format: "100g salmon sashimi (1/2 cup) · 200 cal, 22g P, 0g F"
+  // Returns '' when ingredients is missing or empty (legacy meals degrade gracefully).
+  renderIngredientList(ingredients) {
+    if (!Array.isArray(ingredients) || ingredients.length === 0) return '';
+
+    const fmtVolume = (ing) => {
+      if (ing.cups != null && ing.cups > 0) {
+        const c = ing.cups;
+        if (c === 0.25) return '1/4 cup';
+        if (c === 0.5) return '1/2 cup';
+        if (c === 0.75) return '3/4 cup';
+        if (c === 1) return '1 cup';
+        return `${c} cup`;
+      }
+      if (ing.tsp != null) return `${ing.tsp} tsp`;
+      if (ing.tbsp != null) return `${ing.tbsp} tbsp`;
+      if (ing.oz != null) return `${ing.oz} oz`;
+      if (ing.count) return ing.count;
+      return '';
+    };
+
+    const rows = ingredients.map(ing => {
+      const name = UI.escapeHtml(ing.name || '');
+      const grams = ing.grams != null ? `${ing.grams}g` : '';
+      const vol = fmtVolume(ing);
+      const volPart = vol ? ` <span style="color:var(--text-muted);">(${UI.escapeHtml(vol)})</span>` : '';
+      const macroParts = [];
+      if (ing.cal != null) macroParts.push(`${ing.cal} cal`);
+      if (ing.protein) macroParts.push(`${ing.protein}g P`);
+      if (ing.fiber) macroParts.push(`${ing.fiber}g F`);
+      const macros = macroParts.length ? ` <span style="color:var(--text-muted);">· ${macroParts.join(', ')}</span>` : '';
+      return `<div style="padding:3px 0; font-size:var(--text-xs);"><span style="color:var(--text-secondary); font-weight:500;">${grams}</span> ${name}${volPart}${macros}</div>`;
+    }).join('');
+
+    return `<div style="margin:var(--space-xs) 0; padding:var(--space-xs) var(--space-sm); background:var(--bg-elevated); border-radius:var(--radius-sm);">${rows}</div>`;
+  },
+
   // --- Auto-resize textarea to fit content ---
   autoResize(el) {
     if (!el) return;

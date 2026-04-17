@@ -180,15 +180,22 @@ const ProgressView = {
         html += `<div style="font-weight:600; font-size:var(--text-sm); margin-bottom:var(--space-xs);">${dayLabel}</div>`;
         if (day.meals) {
           for (const m of day.meals) {
-            html += `<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:var(--text-sm);">
-              <span>${UI.escapeHtml(m.name || m.meal)}</span>
-              <span style="color:var(--text-muted); font-size:var(--text-xs);">${m.calories} cal - ${m.protein}g P</span>
+            const ingredientsHtml = UI.renderIngredientList(m.ingredients);
+            const fiberText = m.fiber ? ` - ${m.fiber}g F` : '';
+            html += `<div style="padding:4px 0;">
+              <div style="display:flex; justify-content:space-between; font-size:var(--text-sm);">
+                <span>${UI.escapeHtml(m.name || m.meal)}</span>
+                <span style="color:var(--text-muted); font-size:var(--text-xs);">${m.calories} cal - ${m.protein}g P${fiberText}</span>
+              </div>
+              ${ingredientsHtml}
             </div>`;
           }
         }
         if (day.day_totals) {
+          const dt = day.day_totals;
+          const fiberTotal = dt.fiber != null ? ` - ${dt.fiber}g F` : '';
           html += `<div style="font-size:var(--text-xs); color:var(--text-muted); margin-top:var(--space-xs); padding-top:var(--space-xs); border-top:1px solid var(--border-color);">
-            ~${day.day_totals.calories} cal - ${day.day_totals.protein}g P
+            ~${dt.calories} cal - ${dt.protein}g P${fiberTotal}
           </div>`;
         }
         if (day.notes) {

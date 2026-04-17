@@ -90,7 +90,7 @@ const PlanView = {
         const mealType = UI.escapeHtml(meal.type || meal.meal || '');
         const mealName = UI.escapeHtml(meal.suggestion || meal.name || meal.description || '');
         const desc = meal.description ? UI.escapeHtml(meal.description) : '';
-        const ingredientsHtml = PlanView.renderIngredients(meal.ingredients);
+        const ingredientsHtml = UI.renderIngredientList(meal.ingredients);
         const fiberText = meal.fiber ? ` · ${meal.fiber}g fiber` : '';
         html += `
           <div class="card" style="margin-bottom:var(--space-sm);">
@@ -116,45 +116,6 @@ const PlanView = {
     }
 
     return html;
-  },
-
-  // Render structured ingredient list for a meal.
-  // Format: "100g salmon sashimi (1/2 cup) — 200 cal, 22g P, 0g fiber"
-  // Falls back to empty string if no ingredients[] array (legacy meals just show description).
-  renderIngredients(ingredients) {
-    if (!Array.isArray(ingredients) || ingredients.length === 0) return '';
-
-    const fmtVolume = (ing) => {
-      if (ing.cups != null && ing.cups > 0) {
-        // Pretty-print common fractions
-        const c = ing.cups;
-        if (c === 0.25) return '1/4 cup';
-        if (c === 0.5) return '1/2 cup';
-        if (c === 0.75) return '3/4 cup';
-        if (c === 1) return '1 cup';
-        return `${c} cup`;
-      }
-      if (ing.tsp != null) return `${ing.tsp} tsp`;
-      if (ing.tbsp != null) return `${ing.tbsp} tbsp`;
-      if (ing.oz != null) return `${ing.oz} oz`;
-      if (ing.count) return ing.count;
-      return '';
-    };
-
-    const rows = ingredients.map(ing => {
-      const name = UI.escapeHtml(ing.name || '');
-      const grams = ing.grams != null ? `${ing.grams}g` : '';
-      const vol = fmtVolume(ing);
-      const volPart = vol ? ` <span style="color:var(--text-muted);">(${UI.escapeHtml(vol)})</span>` : '';
-      const macroParts = [];
-      if (ing.cal != null) macroParts.push(`${ing.cal} cal`);
-      if (ing.protein) macroParts.push(`${ing.protein}g P`);
-      if (ing.fiber) macroParts.push(`${ing.fiber}g F`);
-      const macros = macroParts.length ? ` <span style="color:var(--text-muted);">· ${macroParts.join(', ')}</span>` : '';
-      return `<div style="padding:3px 0; font-size:var(--text-xs);"><span style="color:var(--text-secondary);">${grams}</span> ${name}${volPart}${macros}</div>`;
-    }).join('');
-
-    return `<div style="margin-top:var(--space-xs); padding:var(--space-xs) var(--space-sm); background:var(--bg-elevated); border-radius:var(--radius-sm);">${rows}</div>`;
   },
 
   async renderWorkout(regimen, date) {
