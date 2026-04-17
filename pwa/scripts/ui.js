@@ -153,18 +153,22 @@ const UI = {
   renderIngredientList(ingredients) {
     if (!Array.isArray(ingredients) || ingredients.length === 0) return '';
 
+    const prettyFraction = (n) => {
+      if (n === 0.25) return '1/4';
+      if (n === 0.5) return '1/2';
+      if (n === 0.75) return '3/4';
+      if (n === 1) return '1';
+      if (n === 1.25) return '1 1/4';
+      if (n === 1.5) return '1 1/2';
+      if (n === 1.75) return '1 3/4';
+      if (n === 2) return '2';
+      return String(n);
+    };
     const fmtVolume = (ing) => {
-      if (ing.cups != null && ing.cups > 0) {
-        const c = ing.cups;
-        if (c === 0.25) return '1/4 cup';
-        if (c === 0.5) return '1/2 cup';
-        if (c === 0.75) return '3/4 cup';
-        if (c === 1) return '1 cup';
-        return `${c} cup`;
-      }
-      if (ing.tsp != null) return `${ing.tsp} tsp`;
-      if (ing.tbsp != null) return `${ing.tbsp} tbsp`;
-      if (ing.oz != null) return `${ing.oz} oz`;
+      if (ing.cups != null && ing.cups > 0) return `${prettyFraction(ing.cups)} cup`;
+      if (ing.tsp != null && ing.tsp > 0) return `${prettyFraction(ing.tsp)} tsp`;
+      if (ing.tbsp != null && ing.tbsp > 0) return `${prettyFraction(ing.tbsp)} tbsp`;
+      if (ing.oz != null && ing.oz > 0) return `${prettyFraction(ing.oz)} oz`;
       if (ing.count) return ing.count;
       return '';
     };
