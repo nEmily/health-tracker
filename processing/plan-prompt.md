@@ -64,15 +64,36 @@ Read `{DATA_DIR}/analysis/{DATE}.json`, parse the JSON, add the `mealPlan` and `
   "days": [
     {
       "date": "YYYY-MM-DD",
-      "remaining_meal": { "name": "...", "suggestion": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "prep_time": "..." },
+      "remaining_meal": { "name": "...", "suggestion": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "prep_time": "..." },
       "meals": [
-        { "meal": "breakfast|lunch|dinner|snack", "name": "...", "description": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "prep_time": "..." }
+        {
+          "meal": "breakfast|lunch|dinner|snack",
+          "name": "...",
+          "description": "...",
+          "ingredients": [
+            { "name": "salmon sashimi", "grams": 100, "cups": null, "cal": 200, "protein": 22, "fiber": 0, "fat": 12 },
+            { "name": "cauliflower rice, cooked", "grams": 50, "cups": 0.5, "cal": 13, "protein": 1, "fiber": 1.5 }
+          ],
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0,
+          "fiber": 0,
+          "prep_time": "..."
+        }
       ],
-      "day_totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
+      "day_totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0 }
     }
   ]
 }
 ```
+
+**Ingredient measurement rules (CRITICAL):**
+- Every ingredient in the `ingredients` array MUST include `grams` -- the user has a food scale and grams are the source of truth.
+- Include `cups` (or `tsp`, `tbsp`, `oz`) as a secondary reference when it's a standard kitchen measure. Use `null` when there's no natural volume equivalent (e.g., proteins like sashimi, steak, chicken breast -- always weigh).
+- Prefer grams over "pieces" or "servings" for anything where portion size affects macros materially (proteins, cheeses, nut butters, oils). A "serving of salmon" is useless; 100g of salmon is actionable.
+- For ingredients that are typically counted (eggs, shrimp, dumplings), include both: `{ "name": "egg whites", "grams": 60, "cups": 0.25, "count": "~2 large whites" }`.
+- In the `description` field, lead with the weight, show the volume equivalent in parens: "100g salmon sashimi" or "50g cauliflower rice (1/2 cup)". Never put a cup measurement without a gram weight beside it.
 
 ### regimen schema
 
