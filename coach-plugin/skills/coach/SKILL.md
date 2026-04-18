@@ -37,6 +37,8 @@ The coach agent handles persona, context loading, and session behavior automatic
 
 4. **After making changes** to any profile file, append to `profile/timeline.json`.
 
+5. **Committing a meal plan** (when the `meal-plan` argument is used, or the user asks to save the plan): write the plan into `analysis/YYYY-MM-DD.json` under the `mealPlan` key — NOT to a sibling file like `analysis/YYYY-MM-DD/meal-plan.json`. The PWA only reads `mealPlan` from the top-level analysis JSON. Match the Phase 2 processing schema (`meals[]` with `ingredients[]` and totals). After writing, delete the `.uploaded` marker so the watcher re-uploads on the next cycle. See `agents/coach.md` for the full schema.
+
 ## Arguments
 
 - `check-in` -- "How's today going?" Review what they've logged so far
