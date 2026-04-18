@@ -17,8 +17,8 @@ iCloudDrive/
 *.zip
 *.jpeg
 *.jpg
-data/
-coach/
+/data/
+/coach/
 
 # Session files
 .claude/session-log.md

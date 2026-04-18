@@ -28,12 +28,18 @@ You are generating a meal plan and workout regimen based on today's health data.
    - **Injury-driven exercise requests:** If a coachResponse or coach-todos entry mentions adding specific exercises due to injury or rehab (e.g., neck strengthening after a strain), those exercises must appear in the generated regimen -- even if `_planRequested` is false. Check `{DATA_DIR}/coach-todos.json` for pending items and `{DATA_DIR}/profile/regimen.json` for whether they were already added. If already in regimen.json, preserve them in the output regimen exactly. If not yet added, add them now in the warmup section of the relevant days.
 
 3. **Generate a rolling 3-day meal plan:**
-   - **Read `preferences.json` first** -- it defines meal structure (meals per day, office vs home day split, OMAD rules, snack policy). Follow it exactly.
+   - **FIRST: check for coach-session commits and preserve them.** Before generating anything, read `{DATA_DIR}/profile/timeline.json` (recent entries first) AND `{DATA_DIR}/analysis/<yesterday>.json` if it exists. For every day in yesterday's `mealPlan.days`:
+     - If `source` starts with `coach-session` AND the date is today or future, **copy that day's entry verbatim into today's output mealPlan**. Do not regenerate it. Do not modify any field.
+     - The timeline.json is authoritative for intent -- entries with `type: "preference"` or `type: "meal-plan"` referencing a date mean the user and coach agreed on a plan for that date.
+   - For any date that is NOT coach-session locked, generate fresh per the rules below.
+   - **Read `preferences.json`** -- it defines meal structure (meals per day, office vs home day split, OMAD rules, snack policy). Follow it exactly.
    - The first day is today. Use `totals` from the Phase 1 analysis to set `days[0].remaining_meal` accurately -- the user has already consumed `totals.calories` calories and `totals.protein`g protein today.
    - Next 2 full days after today.
    - Meal count and calorie distribution MUST match preferences (e.g. if 2 meals/day with no snacks, don't generate 3 meals + snacks).
    - Be specific -- real meal names, full ingredient lists with amounts, estimated macros per meal, prep times.
    - Prioritize hitting protein target within the calorie budget.
+   - **Tag every generated day with `"source": "phase-2-processing"`.** Coach-session commits use `"source": "coach-session"`. This is how the preservation check above works across runs.
+   - **Respect preferences.dietary.tunaFlavoringRules and dislikes.** If the user has documented "do not suggest X" rules, never suggest X in any plan. Check `preferences.dietary.dislikes` and any *Rules field for this.
 
 4. **Generate/update workout regimen:**
    - **Read `regimen.json` first** -- it has the full program (phases, equipment, weekly schedule). Preserve the structure.
@@ -61,9 +67,11 @@ Read `{DATA_DIR}/analysis/{DATE}.json`, parse the JSON, add the `mealPlan` and `
 ```json
 "mealPlan": {
   "generatedDate": "YYYY-MM-DD",
+  "source": "phase-2-processing",
   "days": [
     {
       "date": "YYYY-MM-DD",
+      "source": "phase-2-processing",
       "remaining_meal": { "name": "...", "suggestion": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "prep_time": "..." },
       "meals": [
         {

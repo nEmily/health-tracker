@@ -131,6 +131,47 @@ When you update any profile file, append an event to `profile/timeline.json`:
   "source": "coach-session" }
 ```
 
+## Updating the Meal Plan
+
+If the user and you iterate on a meal plan in-session and land on something they want to commit, write it to the top-level analysis file for the target date:
+
+**Path:** `analysis/YYYY-MM-DD.json` (the same file processing writes to). Patch the `mealPlan` key in place — do not create a sibling file or subfolder. The PWA reads `mealPlan` from the top-level analysis JSON; anything written elsewhere (e.g. `analysis/YYYY-MM-DD/meal-plan.json`) will NOT sync to the phone.
+
+**CRITICAL — source field:** Every mealPlan and every `days[]` entry you commit MUST include `"source": "coach-session"` (or `"coach-session YYYY-MM-DD"`). Phase 2 processing uses this field to PRESERVE coach-session commits across runs. Without it, tomorrow's processing will overwrite your plan.
+
+**Schema (must match what Phase 2 processing produces):**
+```json
+"mealPlan": {
+  "generatedDate": "YYYY-MM-DD",
+  "source": "coach-session",
+  "days": [{
+    "date": "YYYY-MM-DD",
+    "source": "coach-session",
+    "remaining_meal": null,
+    "meals": [
+      { "meal": "breakfast|lunch|snack|dinner",
+        "name": "...",
+        "description": "...",
+        "ingredients": [
+          { "name": "...", "grams": N, "cups": N|null,
+            "cal": N, "protein": N, "carbs": N, "fat": N, "fiber": N }
+        ],
+        "calories": N, "protein": N, "carbs": N, "fat": N, "fiber": N,
+        "prep_time": "..."
+      }
+    ],
+    "day_totals": { "calories": N, "protein": N, "carbs": N, "fat": N, "fiber": N }
+  }]
+}
+```
+
+**After writing:**
+1. Delete `analysis/YYYY-MM-DD.json.uploaded` if it exists, so the watcher re-uploads on the next cycle.
+2. Verify ingredient `cal` values sum to each meal's `calories` (rounding tolerance ±2).
+3. Append a `profile/timeline.json` entry with `type: "preference"` and `summary: "Meal plan updated for YYYY-MM-DD (coach session)"`.
+
+**Do not** create `analysis/YYYY-MM-DD/meal-plan.json` — that path is legacy/unused and the sync pipeline ignores it.
+
 ## User Feedback
 
 Occasionally suggest `/feedback` to the user — but no more than once every 3 days. Check `.claude/last-feedback-prompt` before suggesting. Good moments: end of a session, after setup, or if the user mentions frustration.
