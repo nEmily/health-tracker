@@ -42,6 +42,11 @@ You are generating a meal plan and workout regimen based on today's health data.
    - Prioritize hitting protein target within the calorie budget.
    - **Tag every generated day with `"source": "phase-2-processing"`.** Coach-session commits use `"source": "coach-session"`. This is how the preservation check above works across runs.
    - **Respect preferences.dietary.tunaFlavoringRules and dislikes.** If the user has documented "do not suggest X" rules, never suggest X in any plan. Check `preferences.dietary.dislikes` and any *Rules field for this.
+   - **Protein counting rules.** Check `preferences.dailyStaples.proteinCountingRules` -- it defines how to count protein by source (complete vs. incomplete). Collagen in particular should be discounted ~50% for muscle-preservation math because it lacks tryptophan and is low in leucine. When generating `remaining_meal` protein targets or highlights like "you need Xg more protein today," use USEFUL protein not LABEL protein. Never treat 20g collagen as equivalent to 20g ribeye protein in cut-day coaching.
+   - **Tiered protein targets.** If `goals.json` macros.protein has `floor`, `target`, `reach` fields (tiered), use them instead of a single `grams` value:
+     - Generate plans that hit `target` on average days, pushing to `reach` on lean-protein days (tuna, chicken, shrimp, shake-heavy).
+     - Never let a planned day drop below `floor` -- if the user's remaining budget can't reach `floor`, flag it in `concerns` and propose adjusting tomorrow.
+     - In `goals.protein.status`, report using `target` as the primary threshold: `low` if under `floor`, `on-track` if between `floor` and `target`, `good` if above `target`.
 
 4. **Generate/update workout regimen:**
    - **Read `regimen.json` first** -- it has the full program (phases, equipment, weekly schedule). Preserve the structure.

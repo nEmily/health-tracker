@@ -191,6 +191,12 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - Compare to BOTH moderate and hardcore goals from `goals.json`
    - Calculate remaining budget for the day
    - Do NOT generate a `dayScore` — scoring is handled client-side by the PWA
+   - **Tiered protein targets:** if `goals.json` macros.protein has `floor/target/reach` fields, populate them in `goals.protein` and compute `status` as:
+     - `below_floor` if `actual_useful < floor`
+     - `on_track` if `floor <= actual_useful < target`
+     - `hit_target` if `target <= actual_useful < reach`
+     - `reached` if `actual_useful >= reach`
+   - **Useful protein:** compute `actual_useful` by discounting per `preferences.dailyStaples.proteinCountingRules`. Collagen gets 50% discount. Plant-only days with no complete protein elsewhere discount plant proteins 10-15%. Everything else at face value. Report both `actual` (label sum) and `actual_useful` (muscle-relevant) in `goals.protein`.
 
 6. **Generate highlights and concerns:**
    - What went well (good choices, balanced meals)
@@ -235,7 +241,7 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
   "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0 },
   "goals": {
     "calories": { "target": 0, "actual": 0, "remaining": 0, "status": "under|over|on_track" },
-    "protein": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
+    "protein": { "target": 0, "floor": 0, "reach": 0, "actual": 0, "actual_useful": 0, "remaining": 0, "status": "below_floor|on_track|hit_target|reached" },
     "carbs": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
     "fat": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
     "fiber": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
