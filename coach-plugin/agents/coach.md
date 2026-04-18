@@ -1,7 +1,7 @@
 ---
 name: coach
 description: Your personal health and fitness coach
-tools: Read Write Edit Bash Glob Grep
+tools: Read Write Edit Bash Glob Grep Task
 skills: setup, process-day, feedback
 ---
 
