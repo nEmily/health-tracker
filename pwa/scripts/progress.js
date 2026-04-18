@@ -580,19 +580,21 @@ const ProgressView = {
     // Collect all timestamped measurements for AM/PM analysis
     const allMeasurements = [];
     for (const s of summaries) {
-      if (s.weightLog && s.weightLog.length > 0) {
-        // Use the first measurement of the day (most consistent for trend)
-        const toMs = t => typeof t === 'number' ? t : new Date(t).getTime();
-        const sorted = s.weightLog.slice().sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
-        points.push({ date: s.date, weight: sorted[0].value });
-        for (const entry of s.weightLog) {
-          if (entry.timestamp) allMeasurements.push(entry);
-        }
-      } else if (s.weight?.value) {
-        points.push({ date: s.date, weight: s.weight.value });
-        // If there's a timestamp on the weight object, include it for AM/PM
-        if (s.weight.timestamp) allMeasurements.push(s.weight);
+      // Canonical value: weight.value survives phone-side edits (weightLog[0] may still hold the original typo)
+      const canonical = s.weight?.value;
+      if (typeof canonical === 'number') {
+        points.push({ date: s.date, weight: canonical });
       }
+      // weightLog is only used for AM/PM multi-measurement analysis — not the trend point
+      if (Array.isArray(s.weightLog)) {
+        for (const entry of s.weightLog) {
+          if (entry.timestamp && typeof entry.value === 'number') {
+            allMeasurements.push(entry);
+          }
+        }
+      }
+      // If there is no weight.value but a timestamp on the weight object, include it for AM/PM
+      if (!canonical && s.weight?.timestamp) allMeasurements.push(s.weight);
     }
 
     if (points.length < 2) return '';
@@ -1839,15 +1841,12 @@ const ProgressView = {
     const summaries = await DB.getDailySummaryRange(start, today);
     const analyses = await DB.getAnalysisRange(start, today);
 
-    // Gather weight points
+    // Gather weight points — use weight.value (canonical, survives edits) not weightLog[0]
     const weightPoints = [];
     for (const s of summaries) {
-      if (s.weightLog?.length) {
-        const toMs = t => typeof t === 'number' ? t : new Date(t).getTime();
-        const sorted = s.weightLog.slice().sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
-        weightPoints.push({ date: s.date, weight: sorted[0].value });
-      } else if (s.weight?.value) {
-        weightPoints.push({ date: s.date, weight: s.weight.value });
+      const canonical = s.weight?.value;
+      if (typeof canonical === 'number') {
+        weightPoints.push({ date: s.date, weight: canonical });
       }
     }
     if (weightPoints.length < 2) return '';

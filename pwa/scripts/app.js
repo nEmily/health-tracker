@@ -804,6 +804,8 @@ const App = {
 
       // Run goal migrations on every init (fixes water_oz 96->64, adds hardcore)
       await App.ensureDefaultGoals();
+      // One-time cleanup: purge weight values > 200 lbs (typos like 1028 instead of 102.8)
+      await App.purgeImpossibleWeightsV1();
       // Check for challenge import from URL
       if (typeof Challenges !== 'undefined') Challenges.importFromURL();
       // Check for cloud relay results
@@ -1619,6 +1621,87 @@ const App = {
       App.loadDayView();
     } else {
       UI.toast('No new results on relay');
+    }
+  },
+
+  // One-time cleanup: remove impossible weight values (> 200 lbs) that snuck in
+  // as typos (e.g. 1028 instead of 102.8). Sweeps dailySummary.weightLog,
+  // dailySummary.weight, and entries of type=weight. Preserves all legitimate
+  // multi-weight-per-day logs (values <= 200).
+  async purgeImpossibleWeightsV1() {
+    const flag = await DB.getProfile('purgeImpossibleWeightsV1');
+    if (flag && flag.done) return;
+
+    const THRESHOLD = 200;
+    let summariesCleaned = 0;
+    let entriesDeleted = 0;
+
+    try {
+      const db = await DB.openDB();
+      const tx = db.transaction(['dailySummary', 'entries'], 'readwrite');
+      const sumStore = tx.objectStore('dailySummary');
+      const entryStore = tx.objectStore('entries');
+
+      // Both cursors run on the same readwrite transaction. Chain the second
+      // cursor from inside the first's null-branch to avoid an intermediate
+      // `await` that would let IDB auto-commit (TransactionInactiveError on
+      // Safari/iOS when requests aren't kept on the same event-loop tick).
+      await new Promise((resolve, reject) => {
+        const sumReq = sumStore.openCursor();
+        sumReq.onerror = e => reject(e.target.error);
+        sumReq.onsuccess = e => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const s = cursor.value;
+            let dirty = false;
+            if (Array.isArray(s.weightLog)) {
+              const cleaned = s.weightLog.filter(w => typeof w.value !== 'number' || w.value <= THRESHOLD);
+              if (cleaned.length !== s.weightLog.length) {
+                s.weightLog = cleaned;
+                dirty = true;
+              }
+            }
+            if (s.weight && typeof s.weight.value === 'number' && s.weight.value > THRESHOLD) {
+              if (Array.isArray(s.weightLog) && s.weightLog.length > 0) {
+                const last = s.weightLog[s.weightLog.length - 1];
+                s.weight = { ...s.weight, value: last.value, unit: last.unit || s.weight.unit || 'lbs' };
+              } else {
+                delete s.weight;
+              }
+              dirty = true;
+            }
+            if (dirty) { cursor.update(s); summariesCleaned++; }
+            cursor.continue();
+            return;
+          }
+          // Summaries cursor done — chain entries cursor synchronously on the same tx
+          const entryReq = entryStore.openCursor();
+          entryReq.onerror = err => reject(err.target.error);
+          entryReq.onsuccess = ev => {
+            const c = ev.target.result;
+            if (!c) return resolve();
+            const en = c.value;
+            if (en.type === 'weight' && typeof en.weight_value === 'number' && en.weight_value > THRESHOLD) {
+              c.delete();
+              entriesDeleted++;
+            }
+            c.continue();
+          };
+        };
+      });
+
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = e => reject(e.target.error);
+        tx.onabort = e => reject(e.target.error);
+      });
+
+      await DB.setProfile('purgeImpossibleWeightsV1', { done: true, summariesCleaned, entriesDeleted, ranAt: new Date().toISOString() });
+      if (summariesCleaned || entriesDeleted) {
+        console.log(`purgeImpossibleWeightsV1: cleaned ${summariesCleaned} summaries, deleted ${entriesDeleted} entries`);
+      }
+    } catch (err) {
+      console.error('purgeImpossibleWeightsV1 failed:', err);
     }
   },
 
