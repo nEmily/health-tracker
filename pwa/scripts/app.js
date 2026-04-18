@@ -1642,53 +1642,58 @@ const App = {
       const sumStore = tx.objectStore('dailySummary');
       const entryStore = tx.objectStore('entries');
 
+      // Both cursors run on the same readwrite transaction. Chain the second
+      // cursor from inside the first's null-branch to avoid an intermediate
+      // `await` that would let IDB auto-commit (TransactionInactiveError on
+      // Safari/iOS when requests aren't kept on the same event-loop tick).
       await new Promise((resolve, reject) => {
-        const req = sumStore.openCursor();
-        req.onerror = e => reject(e.target.error);
-        req.onsuccess = e => {
+        const sumReq = sumStore.openCursor();
+        sumReq.onerror = e => reject(e.target.error);
+        sumReq.onsuccess = e => {
           const cursor = e.target.result;
-          if (!cursor) return resolve();
-          const s = cursor.value;
-          let dirty = false;
-          if (Array.isArray(s.weightLog)) {
-            const cleaned = s.weightLog.filter(w => typeof w.value !== 'number' || w.value <= THRESHOLD);
-            if (cleaned.length !== s.weightLog.length) {
-              s.weightLog = cleaned;
+          if (cursor) {
+            const s = cursor.value;
+            let dirty = false;
+            if (Array.isArray(s.weightLog)) {
+              const cleaned = s.weightLog.filter(w => typeof w.value !== 'number' || w.value <= THRESHOLD);
+              if (cleaned.length !== s.weightLog.length) {
+                s.weightLog = cleaned;
+                dirty = true;
+              }
+            }
+            if (s.weight && typeof s.weight.value === 'number' && s.weight.value > THRESHOLD) {
+              if (Array.isArray(s.weightLog) && s.weightLog.length > 0) {
+                const last = s.weightLog[s.weightLog.length - 1];
+                s.weight = { ...s.weight, value: last.value, unit: last.unit || s.weight.unit || 'lbs' };
+              } else {
+                delete s.weight;
+              }
               dirty = true;
             }
+            if (dirty) { cursor.update(s); summariesCleaned++; }
+            cursor.continue();
+            return;
           }
-          if (s.weight && typeof s.weight.value === 'number' && s.weight.value > THRESHOLD) {
-            if (Array.isArray(s.weightLog) && s.weightLog.length > 0) {
-              const last = s.weightLog[s.weightLog.length - 1];
-              s.weight = { ...s.weight, value: last.value, unit: last.unit || s.weight.unit || 'lbs' };
-            } else {
-              delete s.weight;
+          // Summaries cursor done — chain entries cursor synchronously on the same tx
+          const entryReq = entryStore.openCursor();
+          entryReq.onerror = err => reject(err.target.error);
+          entryReq.onsuccess = ev => {
+            const c = ev.target.result;
+            if (!c) return resolve();
+            const en = c.value;
+            if (en.type === 'weight' && typeof en.weight_value === 'number' && en.weight_value > THRESHOLD) {
+              c.delete();
+              entriesDeleted++;
             }
-            dirty = true;
-          }
-          if (dirty) { cursor.update(s); summariesCleaned++; }
-          cursor.continue();
-        };
-      });
-
-      await new Promise((resolve, reject) => {
-        const req = entryStore.openCursor();
-        req.onerror = e => reject(e.target.error);
-        req.onsuccess = e => {
-          const cursor = e.target.result;
-          if (!cursor) return resolve();
-          const en = cursor.value;
-          if (en.type === 'weight' && typeof en.weight_value === 'number' && en.weight_value > THRESHOLD) {
-            cursor.delete();
-            entriesDeleted++;
-          }
-          cursor.continue();
+            c.continue();
+          };
         };
       });
 
       await new Promise((resolve, reject) => {
         tx.oncomplete = () => resolve();
         tx.onerror = e => reject(e.target.error);
+        tx.onabort = e => reject(e.target.error);
       });
 
       await DB.setProfile('purgeImpossibleWeightsV1', { done: true, summariesCleaned, entriesDeleted, ranAt: new Date().toISOString() });
