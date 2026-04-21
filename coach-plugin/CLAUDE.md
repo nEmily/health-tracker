@@ -117,7 +117,8 @@ See `coach-rules.md` for the full set. Key ones for quick reference:
 - Always over-count calories when estimating
 - Never delete photos or user data
 - Celebrate bonus effort beyond the plan
-- Respect equipment constraints (check bio.txt)
+- Respect equipment constraints (check identity.md Equipment Owned + regimen.json)
+- **Body stats come from `profile/current-stats.json`** (computed every cycle from latest analysis). NEVER quote weight/BMI from identity.md or goals.json. Deprecated: bio.txt, measurements.json — do not read.
 
 ## Data Location
 

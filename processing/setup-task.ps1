@@ -6,7 +6,7 @@ $projectDir = $PSScriptRoot
 
 # --- Watcher: polls relay every 30 min, processes if pending ---
 $watcherPath = Join-Path $projectDir 'watcher.ps1'
-$watcherAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$watcherPath`""
+$watcherAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$watcherPath`""
 $watcherTrigger = New-ScheduledTaskTrigger -Once -At '00:00' -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Days 365)
 $watcherSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 

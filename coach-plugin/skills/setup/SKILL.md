@@ -22,7 +22,7 @@ Structure:
 ├── CLAUDE.md          — Coach brain (loads personality + data on every session)
 ├── USER.md            — This user's stats, goals, challenges (written during onboarding)
 ├── conversations.md   — Chat history from the app (built by processing)
-├── profile/           — goals.json, preferences.json, regimen.json, bio.txt, skincare.json
+├── profile/           — goals.json, preferences.json, regimen.json, identity.md, skincare.json, current-stats.json (computed)
 ├── analysis/          — Daily analysis JSONs (populated by processing)
 ├── logs/              — Processing logs
 ├── processing/        — Watcher + process-day scripts, conversation builder
@@ -200,7 +200,7 @@ Then let them lead. Keep it open-ended from there.
 
 **Write files:**
 - `USER.md` — conversational summary of who they are and what they want
-- `profile/bio.txt` — structured stats and goals
+- `profile/identity.md` — immutable identity facts (height, sex, dislikes, genetic patterns, equipment owned). NO current weight or PRs — those live in `current-stats.json` and are computed every processing cycle from the latest analysis files.
 - `profile/goals.json` — calorie/macro/water targets with timeline and milestones
 - `profile/preferences.json` — meal structure, dietary preferences, schedule
 - `profile/regimen.json` — starter workout plan based on equipment and experience

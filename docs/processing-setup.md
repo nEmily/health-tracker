@@ -47,17 +47,17 @@ The processor uses a profile to personalize analysis. The coach folder (your CWD
 # Mac/Linux — run from your coach data folder (e.g. ~/coach)
 mkdir -p profile
 cp /path/to/health-tracker/processing/templates/*.json profile/
-cp /path/to/health-tracker/processing/profiles/example-bio.txt profile/bio.txt
+cp /path/to/health-tracker/processing/profiles/example-identity.md profile/identity.md
 ```
 
 ```powershell
 # Windows — run from your coach data folder (e.g. %USERPROFILE%\coach)
 New-Item -ItemType Directory -Force profile
 Copy-Item health-tracker\processing\templates\*.json profile\
-Copy-Item health-tracker\processing\profiles\example-bio.txt profile\bio.txt
+Copy-Item health-tracker\processing\profiles\example-identity.md profile\identity.md
 ```
 
-Edit `bio.txt` with your personal details (age, height, weight, dietary restrictions, goals). Edit the JSON files to set your calorie targets, workout regimen, and preferences.
+Edit `identity.md` with your immutable identity facts (height, sex, dietary restrictions, equipment owned, genetic patterns). Do NOT put current weight or PRs in identity.md — those are computed into `profile/current-stats.json` every processing cycle from your logged data. Edit the JSON files (goals.json, regimen.json, preferences.json) to set calorie targets, workout regimen, and preferences.
 
 ---
 

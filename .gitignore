@@ -51,8 +51,14 @@ health-sync/package-lock.json
 # Processing runtime
 processing/setup-task.ps1
 
-# Personal profile data (NEVER commit — use processing/profiles/example-bio.txt as template)
+# Personal profile data (NEVER commit — use processing/profiles/example-identity.md as template)
 processing/profiles/emily.txt
 **/bio.txt
+**/bio.txt.deprecated
+**/measurements.json
+**/measurements.json.deprecated
+profile/identity.md
+coach/profile/identity.md
+coach/profile/current-stats.json
 
 # Generated icons (keep SVG source, ignore generated PNGs if any)
