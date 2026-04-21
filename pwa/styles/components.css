@@ -1452,6 +1452,17 @@ input[type="range"]::-webkit-slider-thumb {
   letter-spacing: 0.03em;
 }
 
+.entry-unsynced {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--accent-yellow, #b8860b);
+  background: color-mix(in srgb, var(--accent-yellow, #b8860b) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+  letter-spacing: 0.03em;
+}
+
 .entry-time {
   font-size: var(--text-xs);
   color: var(--text-muted);

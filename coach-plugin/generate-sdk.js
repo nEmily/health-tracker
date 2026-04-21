@@ -36,7 +36,8 @@ This is the data contract for Coach. It describes every file the coach reads or 
 | \`profile/goals.json\` | Coach, Setup | Processing, PWA | When discussing targets |
 | \`profile/regimen.json\` | Coach, Setup | Processing, PWA | When discussing workouts |
 | \`profile/preferences.json\` | Coach, Setup | Processing | When discussing diet preferences |
-| \`profile/bio.txt\` | Setup | Processing, Coach | When discussing user stats |
+| \`profile/identity.md\` | Setup, User | Processing, Coach | When discussing immutable identity facts (height, dislikes, equipment) |
+| \`profile/current-stats.json\` | build-summary.js (every cycle) | Coach, Processing | **Always — source of truth for current weight, trends, streaks** |
 | \`profile/timeline.json\` | Coach | Coach | When understanding plan history |
 | \`weekly-summary.md\` | Processing | Coach | Every returning-user session |
 | \`conversations.md\` | Processing | Coach | Every returning-user session |

@@ -10,10 +10,47 @@ const coachDir = process.env.COACH_DIR || path.join(require('os').homedir(), 'Co
 const analysisDir = path.join(coachDir, 'analysis');
 const goalsPath = path.join(coachDir, 'profile', 'goals.json');
 const outPath = path.join(coachDir, 'weekly-summary.md');
+const statsOutPath = path.join(coachDir, 'profile', 'current-stats.json');
+
+// Helper — emit current-stats.json even in failure/empty cases so coach never reads stale data
+function writeCurrentStats(stats) {
+  try {
+    const profileDir = path.dirname(statsOutPath);
+    if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
+    fs.writeFileSync(statsOutPath, JSON.stringify(stats, null, 2));
+  } catch (e) {
+    console.error('Failed to write current-stats.json:', e.message);
+  }
+}
+
+const emptyStats = () => ({
+  generated_at: new Date().toISOString(),
+  generated_from_analysis_date: null,
+  weight: {
+    current_lbs: null,
+    morning_today_lbs: null,
+    morning_timestamp: null,
+    trend_7d: null,
+    trend_30d: null,
+    readings_count_7d: 0,
+    readings_count_30d: 0,
+  },
+  adherence_7d: {
+    days_tracked: 0,
+    avg_calories: null,
+    avg_protein_g: null,
+    cal_hits: 0,
+    protein_hits: 0,
+    water_hits: 0,
+    workout_days: 0,
+  },
+  streaks: { tracking: 0, calorie_goal: 0, protein_goal: 0 },
+});
 
 if (!fs.existsSync(analysisDir)) {
   fs.writeFileSync(outPath, '# Weekly Summary\n\n_No analysis data yet._\n');
-  console.log('No analysis dir — wrote empty summary');
+  writeCurrentStats(emptyStats());
+  console.log('No analysis dir — wrote empty summary + current-stats');
   process.exit(0);
 }
 
@@ -69,7 +106,8 @@ for (const f of files) {
 
 if (days.length === 0) {
   fs.writeFileSync(outPath, '# Weekly Summary\n\n_No analysis data yet._\n');
-  console.log('No analysis files — wrote empty summary');
+  writeCurrentStats(emptyStats());
+  console.log('No analysis files — wrote empty summary + current-stats');
   process.exit(0);
 }
 
@@ -168,3 +206,91 @@ md += '\n';
 
 fs.writeFileSync(outPath, md);
 console.log(`Built weekly-summary.md: ${thisWeek.length} days, ${md.length} bytes`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// current-stats.json — computed artifact, overwritten every processing cycle.
+// Coach reads this for CURRENT body stats. identity.md does NOT contain numbers
+// that drift (weight, BMI, PRs) — only immutable identity facts live there.
+// ─────────────────────────────────────────────────────────────────────────────
+(function buildCurrentStats() {
+  const stats = emptyStats();
+
+  // Pull last 30 days of analysis with richer weight objects
+  const allFiles = fs.readdirSync(analysisDir)
+    .filter(f => f.endsWith('.json') && !f.endsWith('.prebug-backup') && !f.endsWith('.uploaded'))
+    .sort()
+    .slice(-30);
+
+  const weightReadings = []; // { date, value, morning_value, morning_timestamp }
+  let latestFile = null;
+  let latestData = null;
+  for (const f of allFiles) {
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(analysisDir, f), 'utf8'));
+      if (d.date) { latestFile = f; latestData = d; }
+      if (d.weight && (d.weight.value != null || d.weight.morning_value != null)) {
+        weightReadings.push({
+          date: d.date,
+          value: d.weight.value ?? null,
+          morning_value: d.weight.morning_value ?? null,
+          morning_timestamp: d.weight.morning_timestamp ?? null,
+        });
+      }
+    } catch (e) { /* skip corrupt */ }
+  }
+
+  if (latestData) stats.generated_from_analysis_date = latestData.date;
+
+  // Weight: prefer morning_value (more consistent), fall back to value
+  const pickWeight = (r) => (r.morning_value != null ? r.morning_value : r.value);
+
+  if (weightReadings.length > 0) {
+    const latest = weightReadings[weightReadings.length - 1];
+    stats.weight.current_lbs = pickWeight(latest);
+    stats.weight.morning_today_lbs = latest.morning_value ?? null;
+    stats.weight.morning_timestamp = latest.morning_timestamp ?? null;
+
+    const last7 = weightReadings.slice(-7);
+    const last30 = weightReadings.slice(-30);
+    stats.weight.readings_count_7d = last7.length;
+    stats.weight.readings_count_30d = last30.length;
+
+    if (last7.length >= 2) {
+      const s = pickWeight(last7[0]);
+      const e = pickWeight(last7[last7.length - 1]);
+      if (s != null && e != null) {
+        stats.weight.trend_7d = { start: s, end: e, delta: +(e - s).toFixed(1) };
+      }
+    }
+    if (last30.length >= 2) {
+      const s = pickWeight(last30[0]);
+      const e = pickWeight(last30[last30.length - 1]);
+      if (s != null && e != null) {
+        stats.weight.trend_30d = { start: s, end: e, delta: +(e - s).toFixed(1) };
+      }
+    }
+  }
+
+  // Adherence from the weekly aggregates already computed
+  stats.adherence_7d = {
+    days_tracked: thisWeek.length,
+    avg_calories: thisWeek.length ? thisAvgCal : null,
+    avg_protein_g: thisWeek.length ? thisAvgPro : null,
+    cal_hits: thisCalHits,
+    protein_hits: thisProHits,
+    water_hits: thisWaterHits,
+    workout_days: thisWorkouts,
+  };
+
+  // Streaks — pull from latest analysis if present
+  if (latestData && latestData.streaks) {
+    stats.streaks = {
+      tracking: latestData.streaks.tracking ?? 0,
+      calorie_goal: latestData.streaks.calorie_goal ?? 0,
+      protein_goal: latestData.streaks.protein_goal ?? 0,
+    };
+  }
+
+  writeCurrentStats(stats);
+  console.log(`Built current-stats.json: weight=${stats.weight.current_lbs} lbs (${weightReadings.length} readings in last 30d)`);
+})();

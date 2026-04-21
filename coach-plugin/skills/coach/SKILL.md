@@ -23,8 +23,11 @@ The coach agent handles persona, context loading, and session behavior automatic
    - `USER.md` -- who this person is
    - `conversations.md` -- async chat history
    - `weekly-summary.md` -- compact weekly overview
+   - `profile/current-stats.json` -- **latest weight, trends, streaks** (always auto-load — dose-dependent advice depends on current weight)
    - `profile/goals.json`, `profile/preferences.json`
    - `profile/timeline.json` -- plan evolution
+
+   NEVER read `profile/bio.txt` or `profile/measurements.json` — deprecated. Body numbers come from `current-stats.json` only.
 
 2. **Read coach-rules.md** from the plugin root (`${CLAUDE_PLUGIN_ROOT}/coach-rules.md`). This is the source of truth for data rules, workout rules, and tone.
 

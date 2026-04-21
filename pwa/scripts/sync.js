@@ -574,7 +574,10 @@ const CloudRelay = {
       if (resp.ok) {
         await Sync.markPhotosSynced(date);
         CloudRelay.setSyncStatus('synced');
+        CloudRelay.recordUploadTime(date);
         this.log(`Uploaded ${date} successfully`, 'ok');
+        // Refresh day view so "pending upload" badges clear
+        if (typeof App !== 'undefined' && date === App.selectedDate) App.loadDayView();
         // Check for results — if none found, start polling for future results
         this._gotResults = false;
         this.checkForResults().then(() => {
@@ -721,6 +724,22 @@ const CloudRelay = {
     } finally {
       this._checkingResults = false;
     }
+  },
+
+  // Track last successful upload time per date (used by UI to show pending-upload badges)
+  recordUploadTime(date) {
+    try {
+      const times = JSON.parse(localStorage.getItem('coachSyncTimes') || '{}');
+      times[date] = Date.now();
+      localStorage.setItem('coachSyncTimes', JSON.stringify(times));
+    } catch (e) { /* localStorage may be unavailable */ }
+  },
+
+  getLastSyncTime(date) {
+    try {
+      const times = JSON.parse(localStorage.getItem('coachSyncTimes') || '{}');
+      return times[date] || 0;
+    } catch (e) { return 0; }
   },
 
   // Sync status indicator in header

@@ -26,9 +26,12 @@ Then immediately run the `/setup` skill. Don't wait for input.
 Load minimal context silently:
 1. Read `USER.md` — this is your client
 2. Read `weekly-summary.md` — compact view of their week
-3. DON'T dump any of this back. Just greet them naturally based on what you know.
+3. Read `profile/current-stats.json` — latest weight, trends, adherence (always auto-load — dose-dependent advice depends on current weight, not stale profile data)
+4. DON'T dump any of this back. Just greet them naturally based on what you know.
 
-Everything else is on demand — read `conversations.md`, `profile/goals.json`, `profile/timeline.json`, `profile/preferences.json`, or `analysis/*.json` files only when the conversation needs them.
+Everything else is on demand — read `conversations.md`, `profile/identity.md`, `profile/goals.json`, `profile/timeline.json`, `profile/preferences.json`, or `analysis/*.json` files only when the conversation needs them.
+
+**NEVER read `profile/bio.txt` or `profile/measurements.json`.** They are deprecated. They may still exist as `.deprecated` files on legacy setups — IGNORE them. Body-composition numbers (weight, BMI, PRs) ONLY come from `current-stats.json` or the latest `analysis/YYYY-MM-DD.json`. Identity facts (height, sex, dislikes, genetic patterns) come from `identity.md`.
 
 If `weekly-summary.md` is empty, this is a returning user with no tracking data yet. Don't fake familiarity: "Hey! I don't have any tracking data yet. Log some meals from the app and I'll have something to work with next time."
 
@@ -113,11 +116,17 @@ Read these files when the conversation needs them — not preemptively:
 
 All health data lives in the data directory:
 
-- `profile/` — goals.json, preferences.json, regimen.json, bio.txt, skincare.json
-- `analysis/` — daily analysis JSONs (calories, macros, highlights, coach responses)
+- `profile/`
+  - `identity.md` — immutable facts (height, sex, dislikes, genetic patterns). NO current weight or PRs.
+  - `current-stats.json` — **computed artifact, regenerated every processing cycle.** Latest weight, 7d/30d trends, adherence, streaks. **Source of truth for current body stats.**
+  - `goals.json`, `preferences.json`, `regimen.json`, `skincare.json`, `timeline.json`
+  - ~~`bio.txt`~~, ~~`measurements.json`~~ — DEPRECATED. Never read.
+- `analysis/` — daily analysis JSONs (calories, macros, highlights, coach responses). Each contains `weight.morning_value` — this is the raw source current-stats.json derives from.
 - `conversations.md` — full async chat history from the app
 - `weekly-summary.md` — compact weekly overview (start here for context)
 - `logs/` — processing logs
+
+**Rule for body stats:** Before giving any dose-dependent advice (supplement dosing, BMR/TDEE math, calorie targets tied to bodyweight), read `current-stats.json` for latest weight. If current-stats.json is missing or has null weight, read the latest `analysis/YYYY-MM-DD.json` directly. Do NOT quote numbers from identity.md (it has none) or goals.json (those are targets, not current).
 
 Load on demand. `weekly-summary.md` gives the high-level picture. Read specific `analysis/YYYY-MM-DD.json` files when you need day-level detail.
 
