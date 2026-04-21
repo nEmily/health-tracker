@@ -76,7 +76,9 @@ Profile files (check BOTH locations — ZIP-bundled profile takes priority over 
 - `{DATA_DIR}/profile/goals.json` — fallback goals on the processing machine
 - `{DATA_DIR}/profile/regimen.json` — workout plans (moderate + hardcore schedules)
 - `{DATA_DIR}/profile/preferences.json` — dietary preferences
-- `{DATA_DIR}/profile/bio.txt` — user's personal stats, goals, and context (optional but recommended)
+- `{DATA_DIR}/profile/identity.md` — immutable identity facts, dislikes, equipment, genetic patterns (optional)
+- `{DATA_DIR}/profile/current-stats.json` — **source of truth for current weight, trends, adherence** (computed by build-summary.js every cycle)
+- DEPRECATED (ignore if present): `bio.txt`, `measurements.json`
 
 ## Supplement Photo Processing (NOT subject to No Re-Processing Rule)
 
@@ -175,6 +177,23 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - **Bonus strength on cardio days:** The regimen includes optional `bonusStrength` exercises on cardio days (Tue/Thu/Sat). If the user logs both cardio AND strength/band exercises on the same day, note it as bonus work in highlights. The PWA scores this as +5 bonus points. Include the bonus exercises in `fitness_checked` so scoring can detect them.
    - **Dance class flexibility:** Dance/burlesque classes are NOT pinned to specific days. Cardio days default to elliptical; the user swaps in dance whenever a class is available. Never mark a cardio day as "missed dance class."
 
+   ### Recent Workout History (REQUIRED)
+
+   When writing workout-related highlights/concerns, read the last 5 analysis files (`{DATA_DIR}/analysis/*.json`, sorted descending, excluding today) and reconstruct actual history -- never infer recovery status from the static weekly template alone.
+
+   For each of the last 5 days, inspect `entries[]` for `type === "workout"`. Extract the primary muscle group / session type from `description` and `subtype` (lower body, upper push/pull, full body, cardio, dance, active recovery, core-only). Compute:
+   - `daysSinceLastWorkout` -- consecutive rest days ending yesterday
+   - `workoutsInLast7Days`
+   - `lastMuscleGroup`
+
+   Apply these rules when framing concerns/highlights about today:
+   - **Back-to-back muscle group conflict.** If today's templated regimen calls for the same primary muscle group as yesterday's completed workout, flag it as a forward-looking concern: "Yesterday was lower body -- suggest swapping today to upper or cardio to avoid back-to-back same muscle group."
+   - **Do NOT tell the user to take a rest day if they have not worked out in 3+ days.** Never write "a rest day is warranted" when `daysSinceLastWorkout >= 3`. Frame it instead: "Ease back in with active recovery, mobility, or a light session -- rest isn't what's needed today."
+   - **Flag 2+ day gaps.** If `daysSinceLastWorkout >= 2`, include a forward-looking concern that names the gap and suggests the missed split (moderate intensity on return).
+   - **Only validate a rest day when earned.** Only praise or endorse a rest/off day when `workoutsInLast7Days >= 5`. Below that threshold, steer toward movement.
+
+   Never write advice that conflicts with these rules, even if `regimen.json` says today is rest.
+
 4b. **Analyze skincare adherence:**
    - Check `log.json` for a `skincare` field -- if present, it contains today's AM/PM skincare checklist
    - Note adherence: which products were used, which were skipped
@@ -196,6 +215,7 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - What went well (good choices, balanced meals)
    - What to watch (macro deficits, missing nutrients, high sugar)
    - Frame as forward-looking tips, not warnings (see rule #10 below)
+   - **Prepared-meal declaration detection.** Scan entries for meals logged BEFORE being eaten (signals: "prepared", "weighed", "for dinner tonight", raw-weight notes, timestamp hours before typical meal time). Treat as a DECLARED PLAN and back-solve the remaining-day budget around it. If staples + declared meal push over target, give a forward-looking tip ("Ping me before the afternoon shake next time ribeye is on deck -- I'll back-solve staples"). Don't shame past choices. Reference: 2026-04-18 incident.
 
 7. **Skip body/face photos** — note their existence but do NOT analyze, describe, or comment on them. They are private progress photos.
 
@@ -281,6 +301,20 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
    - `replyTo` must match the user message's `id` field so the app can pair question and answer.
    - Keep responses concise (2-4 sentences). Reference their actual data when relevant.
    - Tone: supportive coach, not lecturer. Encourage without being preachy.
+   - **CRITICAL: After generating coachResponses, append the full exchange to `{DATA_DIR}/conversations.md`.**
+     This file is the persistent chat history that the live coach session reads. Without this step, in-app messages are invisible to the coach.
+     Format (append to end of file, under a date header if new day):
+     ```
+     ## {Day}, {Month} {D}, {YYYY}
+
+     **You** ({H:MM AM/PM}): {user message text}
+
+     **Coach** ({H:MM AM/PM}): {coach response text}
+     ```
+     - Use Pacific time (UTC-7 PDT) for all timestamps.
+     - If a date section already exists in conversations.md for this date, append under it (don't create a duplicate header).
+     - Write user message and coach response as a pair for each exchange.
+     - If coachChat is empty (no new messages), skip this step.
 
 10. **Coach Chat — setting modifications:**
    - If a user's coach message asks to change goals, workout regimen, dietary preferences, or any other setting, include a `settingUpdates` field in the output JSON.
