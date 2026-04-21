@@ -308,6 +308,15 @@ const UI = {
       body.appendChild(aiDesc);
     }
 
+    // Pending upload badge — shown when entry was saved after last successful upload for that date
+    const entryTs = new Date(entry.timestamp).getTime();
+    const lastSync = (typeof CloudRelay !== 'undefined') ? CloudRelay.getLastSyncTime(entry.date) : 0;
+    if (entryTs > lastSync) {
+      const unsynced = UI.createElement('div', 'entry-unsynced');
+      unsynced.textContent = 'Pending upload';
+      body.appendChild(unsynced);
+    }
+
     // Pending/stale analysis indicator
     const showPending = isFood || entry.type === 'workout' || entry.type === 'supplement' || entry.type === 'custom';
     if (!analysisEntry && showPending) {
