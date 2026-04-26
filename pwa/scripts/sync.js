@@ -687,6 +687,7 @@ const CloudRelay = {
 
           this.log(`Imported and verified ${date}`, 'ok');
           verified.push(date);
+          this.recordUploadTime(date); // keep localStorage cache fresh so badges clear immediately
           this.logSyncEvent('import_ok', date);
         } catch (innerErr) {
           this.log(`Error processing ${date}: ${innerErr.message}`, 'error');

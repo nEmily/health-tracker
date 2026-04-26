@@ -308,10 +308,13 @@ const UI = {
       body.appendChild(aiDesc);
     }
 
-    // Pending upload badge — shown when entry was saved after last successful upload for that date
+    // Pending upload badge — shown when entry was saved after last successful upload for that date.
+    // Falls back to analysis.importedAt: if the entry has been analyzed, it was already uploaded,
+    // so don't show the badge even if localStorage was cleared (common on iOS/Safari).
     const entryTs = new Date(entry.timestamp).getTime();
     const lastSync = (typeof CloudRelay !== 'undefined') ? CloudRelay.getLastSyncTime(entry.date) : 0;
-    if (entryTs > lastSync) {
+    const analyzedAt = analysisEntry ? (analysisEntry._importedAt || 0) : 0;
+    if (entryTs > lastSync && entryTs > analyzedAt) {
       const unsynced = UI.createElement('div', 'entry-unsynced');
       unsynced.textContent = 'Pending upload';
       body.appendChild(unsynced);
