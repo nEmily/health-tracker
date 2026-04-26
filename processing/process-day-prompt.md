@@ -194,12 +194,6 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
 
    Never write advice that conflicts with these rules, even if `regimen.json` says today is rest.
 
-4b. **Analyze skincare adherence:**
-   - Check `log.json` for a `skincare` field -- if present, it contains today's AM/PM skincare checklist
-   - Note adherence: which products were used, which were skipped
-   - Compare to the skincare routine in `profile/skincare.json` (if it exists in the extracted data or `$DATA_DIR/profile/`)
-   - Include skincare summary in highlights/concerns (e.g., "Skipped PM routine -- consistency matters for actives")
-
 4. **Handle alcohol/custom entries:**
    - Custom entries have `type: 'custom'`, `subtype` (beer/wine/cocktail/shot/etc.), `quantity`, and `calories_est`
    - Include in calorie totals
@@ -264,11 +258,6 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
   "highlights": ["..."],
   "concerns": ["..."],
   "streaks": { "tracking": 0, "calorie_goal": 0, "protein_goal": 0 },
-  "skincareAdherence": {
-    "am": { "completed": 4, "total": 4, "skipped": [] },
-    "pm": { "completed": 2, "total": 3, "skipped": ["retinol"] }
-  },
-
   "coachResponses": [
     { "replyTo": "coach_msgid", "text": "Response to user's question", "timestamp": 0 }
   ],

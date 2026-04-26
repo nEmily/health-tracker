@@ -87,7 +87,7 @@ You are generating a meal plan and workout regimen based on today's health data.
 
 Read `{DATA_DIR}/analysis/{DATE}.json`, parse the JSON, add the `mealPlan` and `regimen` keys using the schemas below, and write the entire object back to the same file path.
 
-**CRITICAL: Preserve ALL existing fields exactly as they are.** Do not modify `entries`, `totals`, `goals`, `highlights`, `concerns`, `coachResponses`, `pwaProfile`, `supplementUpdates`, `skincareAdherence`, `streaks`, `_planRequested`, `_planStale`, or any other field. Only add `mealPlan` and `regimen`.
+**CRITICAL: Preserve ALL existing fields exactly as they are.** Do not modify `entries`, `totals`, `goals`, `highlights`, `concerns`, `coachResponses`, `pwaProfile`, `supplementUpdates`, `streaks`, `_planRequested`, `_planStale`, or any other field. Only add `mealPlan` and `regimen`.
 
 **Do NOT use em dashes, en dashes, or smart quotes** in the JSON output. Use plain hyphens (-), double hyphens (--), and straight quotes ("") instead.
 

@@ -1,4 +1,4 @@
-/* Update Banner */
+﻿/* Update Banner */
 .update-banner {
   display: flex;
   align-items: center;
@@ -564,7 +564,7 @@
 .fitness-set-check::before {
   content: '';
   position: absolute;
-  inset: 8px; /* (44-28)/2 — 28px visual circle inside 44px tap area */
+  inset: 8px; /* (44-28)/2 â€” 28px visual circle inside 44px tap area */
   border-radius: 50%;
   border: 2px solid var(--border-accent);
   background: transparent;
@@ -586,530 +586,8 @@
   opacity: 0.5;
 }
 
-/* Skincare checklist */
-.skincare-progress-summary {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  text-align: center;
-  margin-bottom: var(--space-sm);
-  letter-spacing: 0.5px;
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-}
 
-.skincare-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  margin: var(--space-sm) 0 var(--space-xs);
-  padding: 0 var(--space-xs);
-}
-
-.skincare-completion-badge {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--accent-green);
-}
-
-.skincare-product-row {
-  padding: var(--space-sm) var(--space-md);
-}
-
-.skincare-product-row.skincare-done {
-  opacity: 0.6;
-}
-
-.skincare-category-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: lowercase;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* Skincare Coach — Weekly Grid */
-.sc-weekly-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-  overflow-x: auto;
-}
-
-.sc-day-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: var(--space-xs) var(--space-xs);
-  text-align: center;
-  min-width: 0;
-}
-
-.sc-day-card.sc-day-override {
-  border-color: var(--accent-primary);
-  border-style: dashed;
-}
-
-.sc-day-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 2px;
-}
-
-.sc-day-slot {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 2px;
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.sc-slot-label {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.sc-slot-count {
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-/* Skincare Coach — Routine Editor */
-.sc-day-selector {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  padding-bottom: var(--space-xs);
-  margin-bottom: var(--space-sm);
-  -webkit-overflow-scrolling: touch;
-}
-
-.sc-day-sel-btn {
-  flex: 0 0 auto;
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-}
-
-.sc-day-sel-btn.active {
-  background: var(--accent-primary);
-  color: var(--bg-primary);
-  border-color: var(--accent-primary);
-}
-
-.sc-day-sel-btn.sc-has-override {
-  border-style: dashed;
-  border-color: var(--accent-primary);
-}
-
-.sc-slot-section {
-  margin-bottom: var(--space-md);
-}
-
-.sc-slot-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--space-xs);
-}
-
-.sc-routine-product {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  margin-bottom: 4px;
-}
-
-.sc-routine-order {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-muted);
-  flex: 0 0 16px;
-  text-align: center;
-}
-
-.sc-routine-photo {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.sc-routine-product-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.sc-routine-product-name {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-/* Skincare Coach — Product Picker */
-.sc-product-picker-list {
-  max-height: 50dvh;
-  overflow-y: auto;
-}
-
-.sc-product-picker-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  width: 100%;
-  border: none;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  border-bottom: 1px solid var(--border-color);
-  min-height: 44px;
-}
-
-.sc-product-picker-item:active {
-  background: var(--bg-hover);
-}
-
-.sc-picker-photo {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.sc-picker-photo-placeholder {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-hover);
-  flex-shrink: 0;
-}
-
-/* Skincare Coach — Product Catalog */
-.sc-catalog-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.sc-catalog-photo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.sc-catalog-photo-placeholder {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-hover);
-  flex-shrink: 0;
-}
-
-.sc-catalog-item-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.sc-catalog-remove {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: var(--text-lg);
-  cursor: pointer;
-  padding: var(--space-xs);
-  min-width: 44px;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sc-add-form {
-  margin-top: var(--space-md);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--border-color);
-}
-
-/* ── Skincare Onboarding ── */
-
-.skincare-onboarding {
-  padding: var(--space-sm) 0;
-}
-
-.skincare-ob-progress {
-  display: flex;
-  justify-content: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-}
-
-.skincare-ob-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--border-color);
-  transition: background 0.2s, transform 0.2s;
-}
-
-.skincare-ob-dot.active {
-  background: var(--accent-primary);
-  transform: scale(1.3);
-}
-
-.skincare-ob-dot.done {
-  background: var(--accent-green);
-}
-
-.skincare-ob-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg);
-  animation: fadeIn 0.3s ease both;
-}
-
-.skincare-ob-icon {
-  text-align: center;
-  margin-bottom: var(--space-md);
-}
-
-.skincare-ob-title {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 var(--space-sm);
-}
-
-.skincare-ob-desc {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin: 0 0 var(--space-md);
-}
-
-.skincare-ob-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 var(--space-md);
-}
-
-.skincare-ob-list li {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  padding: var(--space-xs) 0;
-  padding-left: var(--space-md);
-  position: relative;
-}
-
-.skincare-ob-list li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--accent-primary);
-}
-
-.skincare-ob-actions {
-  display: flex;
-  gap: var(--space-sm);
-  margin-top: var(--space-md);
-}
-
-.skincare-ob-actions .btn {
-  flex: 1;
-}
-
-/* Skin type and concern selection */
-
-.skincare-ob-type-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-}
-
-.skincare-ob-type-btn {
-  flex: 1 1 auto;
-  min-width: 70px;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-  text-align: center;
-}
-
-.skincare-ob-type-btn:active {
-  transform: scale(0.97);
-}
-
-.skincare-ob-type-btn.selected {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary-dim);
-  color: var(--accent-primary);
-}
-
-.skincare-ob-concerns-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-}
-
-.skincare-ob-concern-btn {
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  background: var(--bg-input);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-  white-space: nowrap;
-}
-
-.skincare-ob-concern-btn:active {
-  transform: scale(0.97);
-}
-
-.skincare-ob-concern-btn.selected {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary-dim);
-  color: var(--accent-primary);
-}
-
-/* Photo capture areas */
-
-.skincare-ob-photo-area {
-  position: relative;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  margin-bottom: var(--space-sm);
-}
-
-.skincare-ob-photo-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-sm);
-  padding: var(--space-xl) var(--space-md);
-  border: 2px dashed var(--border-accent);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
-}
-
-.skincare-ob-photo-placeholder:active {
-  border-color: var(--accent-primary);
-  color: var(--text-secondary);
-}
-
-.skincare-ob-photo-img {
-  width: 100%;
-  max-height: 240px;
-  object-fit: cover;
-  border-radius: var(--radius-md);
-  display: block;
-}
-
-.skincare-ob-photo-remove {
-  position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: var(--text-lg);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-/* Waiting state */
-
-.skincare-ob-waiting {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--bg-input);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.skincare-ob-waiting-bar {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--border-accent);
-  border-top-color: var(--accent-primary);
-  border-radius: var(--radius-full);
-  animation: skincare-ob-spin 0.8s linear infinite;
-}
-
-@keyframes skincare-ob-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Cards — minimal, barely bordered */
+/* Cards â€” minimal, barely bordered */
 .card {
   background: var(--bg-card);
   border-radius: var(--radius-md);
@@ -1313,7 +791,7 @@ textarea.coach-input {
   resize: none;
   min-height: 44px;
   overflow-y: hidden;
-  /* Ensure caret stays visible — extra bottom padding for cursor rendering */
+  /* Ensure caret stays visible â€” extra bottom padding for cursor rendering */
   padding-bottom: var(--space-md);
 }
 
@@ -1469,7 +947,7 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: var(--space-xs);
 }
 
-/* Entry delete button — visible on tap */
+/* Entry delete button â€” visible on tap */
 .entry-delete-btn {
   display: none;
   align-items: center;
@@ -1863,7 +1341,7 @@ input[type="range"]::-webkit-slider-thumb {
   100% { transform: scale(1); }
 }
 
-/* water-pick-icon removed — water picker uses text labels only */
+/* water-pick-icon removed â€” water picker uses text labels only */
 
 .water-pick-oz {
   font-size: var(--text-base);
@@ -2123,7 +1601,7 @@ input[type="range"]::-webkit-slider-thumb {
   text-align: center;
 }
 
-/* Progress Photos — subtype rows */
+/* Progress Photos â€” subtype rows */
 .progress-photos-subtype {
   margin-bottom: var(--space-sm);
 }
@@ -2597,9 +2075,9 @@ input[type="range"]::-webkit-slider-thumb {
   transition: width var(--transition-base);
 }
 
-/* ── Settings Cards ── */
+/* â”€â”€ Settings Cards â”€â”€ */
 
-/* Section label — small uppercase muted heading */
+/* Section label â€” small uppercase muted heading */
 .s-section-label {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -2610,7 +2088,7 @@ input[type="range"]::-webkit-slider-thumb {
   padding: 0 2px;
 }
 
-/* Card group — flush-joined cards with dividers, single border */
+/* Card group â€” flush-joined cards with dividers, single border */
 .s-group {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
@@ -2642,7 +2120,7 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--color-danger, #f85149);
 }
 
-/* Danger zone card — subtle red border */
+/* Danger zone card â€” subtle red border */
 .s-card--danger {
   border-left: 3px solid var(--color-danger, #f85149);
 }
@@ -2873,7 +2351,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--accent-primary);
 }
 
-/* ── Coach Card ── */
+/* â”€â”€ Coach Card â”€â”€ */
 .photo-preview-remove {
   position: absolute;
   top: 6px;
@@ -3113,7 +2591,7 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: var(--text-xs);
 }
 
-/* Chips row — wrapping pills */
+/* Chips row â€” wrapping pills */
 .score-breakdown-wrap {
   position: relative;
   margin-top: var(--space-sm);
@@ -3135,7 +2613,7 @@ input[type="range"]::-webkit-slider-thumb {
   flex-shrink: 0;
 }
 
-/* ── Coach Chat ── */
+/* â”€â”€ Coach Chat â”€â”€ */
 
 /* Outer container: flex column so messages grow and input stays at bottom */
 .coach-chat {
@@ -3238,7 +2716,7 @@ input[type="range"]::-webkit-slider-thumb {
   padding: var(--space-xs) 0;
 }
 
-/* Input bar — pinned at bottom of .coach-chat */
+/* Input bar â€” pinned at bottom of .coach-chat */
 .coach-input-bar {
   display: flex;
   align-items: flex-end;
@@ -3306,7 +2784,7 @@ input[type="range"]::-webkit-slider-thumb {
   pointer-events: none;
 }
 
-/* "~30 min reply" hint — small muted text below the chat box */
+/* "~30 min reply" hint â€” small muted text below the chat box */
 .coach-reply-hint {
   font-size: var(--text-xs);
   color: var(--text-muted);
@@ -3315,7 +2793,7 @@ input[type="range"]::-webkit-slider-thumb {
   padding-right: 2px;
 }
 
-/* Setting update notification — inline card after coach response */
+/* Setting update notification â€” inline card after coach response */
 .coach-setting-update {
   display: flex;
   align-items: flex-start;
@@ -3340,7 +2818,7 @@ input[type="range"]::-webkit-slider-thumb {
   line-height: 1.4;
 }
 
-/* ── Coach Analysis Section ── */
+/* â”€â”€ Coach Analysis Section â”€â”€ */
 .coach-analysis-section {
   margin-top: var(--space-lg);
 }
@@ -3520,9 +2998,9 @@ input[type="range"]::-webkit-slider-thumb {
   opacity: 0.9;
 }
 
-/* ── Challenges ── */
+/* â”€â”€ Challenges â”€â”€ */
 
-/* Challenge card — main container */
+/* Challenge card â€” main container */
 .challenge-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -3536,7 +3014,7 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: var(--space-xs);
 }
 
-/* Completed/abandoned cards — muted */
+/* Completed/abandoned cards â€” muted */
 .challenge-card--completed,
 .challenge-card--abandoned {
   opacity: 0.6;
@@ -3986,7 +3464,7 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-primary);
 }
 
-/* ── Enhanced Template Picker ── */
+/* â”€â”€ Enhanced Template Picker â”€â”€ */
 
 .chal-picker-list {
   display: flex;
@@ -4103,7 +3581,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: transparent;
 }
 
-/* ── Confirmation Step ── */
+/* â”€â”€ Confirmation Step â”€â”€ */
 
 .chal-confirm-back {
   background: none;
@@ -4297,7 +3775,7 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: var(--text-base);
 }
 
-/* ── Post-enrollment Onboarding ── */
+/* â”€â”€ Post-enrollment Onboarding â”€â”€ */
 
 .chal-onboard-hero {
   text-align: center;
@@ -4387,7 +3865,7 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: var(--text-base);
 }
 
-/* ── Custom Builder ── */
+/* â”€â”€ Custom Builder â”€â”€ */
 
 .chal-builder-body {
   padding: var(--space-xs) 0;

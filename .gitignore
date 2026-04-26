@@ -42,6 +42,12 @@ TODO.md
 start-dev-server.bat
 start-dev-server.vbs
 dev-server.js
+check_status.ps1
+compare_entries.ps1
+compare_entries.sh
+update_apr20.py
+processing/gen_plan.py
+test-results/
 
 # Root test dependencies (not part of the app)
 /package.json

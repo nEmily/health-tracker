@@ -195,12 +195,13 @@ const GoalsView = {
 
     if (n.calIntake != null && n.calGoal) {
       const remaining = n.calGoal - n.calIntake;
+      const remainingCal = Math.round(remaining);
       const pct = Math.min(100, Math.round((n.calIntake / n.calGoal) * 100));
       const color = remaining > 0 ? 'var(--accent-green)' : 'var(--accent-red)';
       html += `
         <div style="display:flex; justify-content:space-between; margin-bottom: var(--space-xs);">
           <span style="font-weight:600;">Calories</span>
-          <span style="color:var(--text-secondary)">${remaining > 0 ? remaining + ' remaining' : Math.abs(remaining) + ' over'}</span>
+          <span style="color:var(--text-secondary)">${remaining > 0 ? remainingCal + ' remaining' : Math.abs(remainingCal) + ' over'}</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%; background:${color}"></div></div>
         <div style="font-size:var(--text-xs); color:var(--text-muted); margin-top:2px;">${n.calIntake} eaten of ${n.calGoal}</div>
@@ -213,10 +214,11 @@ const GoalsView = {
       for (const [name, m] of Object.entries(n.macros)) {
         if (!m.goal) continue;
         const remaining = m.goal - m.actual;
+        const remainingDisplay = Math.round(remaining * 10) / 10;
         html += `
           <div style="display:flex; justify-content:space-between; font-size:var(--text-sm); margin-bottom:4px;">
             <span style="text-transform:capitalize;">${name}</span>
-            <span style="color:var(--text-secondary)">${remaining > 0 ? remaining + 'g left' : 'goal hit!'}</span>
+            <span style="color:var(--text-secondary)">${remaining > 0 ? remainingDisplay + 'g left' : 'goal hit!'}</span>
           </div>
         `;
       }
@@ -226,10 +228,11 @@ const GoalsView = {
     // Water remaining
     if (n.waterActual != null && n.waterGoal) {
       const remaining = n.waterGoal - n.waterActual;
+      const remainingWater = Math.round(remaining * 10) / 10;
       html += `
         <div style="display:flex; justify-content:space-between; font-size:var(--text-sm); margin-top:var(--space-sm);">
           <span>Water</span>
-          <span style="color:var(--text-secondary)">${remaining > 0 ? remaining + ' oz left' : 'goal hit!'}</span>
+          <span style="color:var(--text-secondary)">${remaining > 0 ? remainingWater + ' oz left' : 'goal hit!'}</span>
         </div>
       `;
     }

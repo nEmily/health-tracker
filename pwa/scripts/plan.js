@@ -87,11 +87,28 @@ const PlanView = {
 
     if (todayPlan.meals) {
       for (const meal of todayPlan.meals) {
-        const mealType = UI.escapeHtml(meal.type || meal.meal || '');
+        // Support both old schema (meal.type, meal.calories, meal.ingredients)
+        // and current processing schema (meal.time, meal.totals.calories, meal.items)
+        const mealType = UI.escapeHtml(meal.type || meal.time || meal.meal || '');
         const mealName = UI.escapeHtml(meal.suggestion || meal.name || meal.description || '');
         const desc = meal.description ? UI.escapeHtml(meal.description) : '';
-        const ingredientsHtml = UI.renderIngredientList(meal.ingredients);
-        const fiberText = meal.fiber ? ` · ${meal.fiber}g fiber` : '';
+        const mealCal = meal.calories ?? meal.totals?.calories;
+        const mealProtein = meal.protein ?? meal.totals?.protein_label ?? meal.totals?.protein ?? 0;
+        const mealFiber = meal.fiber ?? meal.totals?.fiber;
+        const fiberText = mealFiber ? ` · ${mealFiber}g fiber` : '';
+
+        // Render items list (current schema: meal.items with name/volume/grams/notes)
+        // Falls back to legacy meal.ingredients format
+        let ingredientsHtml = UI.renderIngredientList(meal.ingredients);
+        if (!ingredientsHtml && Array.isArray(meal.items) && meal.items.length > 0) {
+          ingredientsHtml = '<ul style="margin:var(--space-xs) 0 0; padding-left:var(--space-md); font-size:var(--text-sm); color:var(--text-secondary);">';
+          for (const item of meal.items) {
+            const vol = item.volume ? ` — ${UI.escapeHtml(item.volume)}` : (item.grams ? ` — ${item.grams}g` : '');
+            ingredientsHtml += `<li style="margin-bottom:2px;">${UI.escapeHtml(item.name || '')}${vol}${item.notes ? ' <span style="color:var(--text-muted);">(' + UI.escapeHtml(item.notes) + ')</span>' : ''}</li>`;
+          }
+          ingredientsHtml += '</ul>';
+        }
+
         html += `
           <div class="card" style="margin-bottom:var(--space-sm);">
             <div style="font-size:var(--text-xs); color:var(--accent-green); text-transform:uppercase; font-weight:600; margin-bottom:2px;">${mealType}</div>
@@ -99,7 +116,7 @@ const PlanView = {
             ${ingredientsHtml}
             ${desc && desc !== mealName && !ingredientsHtml ? `<div style="font-size:var(--text-sm); color:var(--text-muted); margin-top:var(--space-xs);">${desc}</div>` : ''}
             <div style="font-size:var(--text-xs); color:var(--text-secondary); margin-top:var(--space-xs);">
-              ${meal.calories || '?'} cal · ${meal.protein || 0}g protein${fiberText}${meal.prep_time ? ' · ' + meal.prep_time : ''}
+              ${mealCal != null ? mealCal : '?'} cal · ${mealProtein}g protein${fiberText}${meal.prep_time ? ' · ' + meal.prep_time : ''}
             </div>
           </div>
         `;
