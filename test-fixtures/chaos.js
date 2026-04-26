@@ -180,18 +180,15 @@ const actions = [
     await page.click('#header-prev').catch(() => {});
   }},
 
-  // Skincare panel segment switching (Phase 2+)
-  { name: 'tap-skin-segment', weight: 3, fn: async (page) => {
-    await page.click('.today-seg-btn[data-panel="skin"]').catch(() => {});
-  }},
+  // Segment switching (Diet, Fitness — Skin removed)
   { name: 'tap-diet-segment', weight: 3, fn: async (page) => {
     await page.click('.today-seg-btn[data-panel="diet"]').catch(() => {});
   }},
   { name: 'tap-fitness-segment', weight: 3, fn: async (page) => {
     await page.click('.today-seg-btn[data-panel="fitness"]').catch(() => {});
   }},
-  { name: 'interrupt-skin-nav', weight: 3, fn: async (page) => {
-    await page.click('.today-seg-btn[data-panel="skin"]').catch(() => {});
+  { name: 'interrupt-fitness-nav', weight: 3, fn: async (page) => {
+    await page.click('.today-seg-btn[data-panel="fitness"]').catch(() => {});
     await page.waitForTimeout(200);
     await page.click('#header-prev').catch(() => {});
   }},

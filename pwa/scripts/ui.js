@@ -3,8 +3,8 @@
 const UI = {
   // --- Day Boundary ---
   // Hours to subtract from current time to get the "effective date."
-  // 0 = midnight (default), 4 = day starts at 4 AM (entries at 2 AM count as previous day).
-  _dayBoundaryHours: 0,
+  // 0 = midnight, 4 = day starts at 4 AM (entries at 2 AM count as previous day). Default: 4.
+  _dayBoundaryHours: 4,
 
   // --- Date Helpers ---
   today() {

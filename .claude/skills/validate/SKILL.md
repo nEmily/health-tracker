@@ -153,9 +153,9 @@ Playwright already saves screenshots to `.claude/test-screenshots/validate/` dur
 1. **Read key screenshots** — use the Read tool on these PNG files (Claude Code can see images):
 
    **Core screens (always check):**
-   - `audit-today-diet.png`, `audit-today-fitness.png`, `audit-today-skin.png` — all 3 Today panels
+   - `audit-today-diet.png`, `audit-today-fitness.png` — Today panels (Diet, Fitness — Skin tab removed)
    - `audit-coach.png` — Coach tab
-   - `audit-progress-insights.png`, `audit-progress-trends.png`, `audit-progress-skin.png` — Progress tabs
+   - `audit-progress-insights.png`, `audit-progress-trends.png`, `audit-progress-challenges.png` — Progress tabs
    - `audit-settings.png`, `audit-settings-bottom.png` — Settings
    - `challenges-progress.png`, `challenges-320px.png` — Challenges tab at both viewports
 
@@ -228,7 +228,7 @@ Walk through these flows in order, screenshotting and evaluating at each step:
 
 **Today tab:**
 - [ ] Load app — score ring renders, date shows correctly
-- [ ] Swipe between Diet / Fitness / Skin panels
+- [ ] Swipe between Diet / Fitness panels
 - [ ] Tap Food quick action — form opens, type a meal, save
 - [ ] Tap Water — picker opens, select amount, verify total updates
 - [ ] Tap an entry — edit modal opens, content editable
@@ -236,11 +236,8 @@ Walk through these flows in order, screenshotting and evaluating at each step:
 
 **Coach tab:**
 - [ ] Inbox renders (or empty state)
-- [ ] Skincare section shows routine or onboarding wizard
-- [ ] If onboarding: walk through all 5 steps (welcome, concerns, product photo, face photo, completion)
-
 **Progress tab:**
-- [ ] Insights / Trends / Skin / Challenges sub-tabs all render
+- [ ] Insights / Trends / Challenges sub-tabs all render
 - [ ] Challenges: tap "Start a Challenge" — template picker opens with icons/difficulty
 - [ ] Select a template — confirmation step shows tasks, duration, dates
 - [ ] Enroll — onboarding screen appears, then challenge card with checklist

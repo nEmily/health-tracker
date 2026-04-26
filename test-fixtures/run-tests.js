@@ -2564,9 +2564,9 @@ async function testSkincarePanel(page, fixtures) {
     await page.waitForTimeout(300);
   }
 
-  // Verify all 3 segment buttons exist
+  // Verify all 2 segment buttons exist (Diet, Fitness — Skin removed)
   const segBtns = await page.$$('.today-seg-btn').catch(() => []);
-  assert(segBtns.length === 3, `3 segment buttons exist (got ${segBtns.length})`);
+  assert(segBtns.length === 2, `2 segment buttons exist (got ${segBtns.length})`);
 }
 
 async function testFitnessPanel(page, fixtures) {
@@ -2951,7 +2951,7 @@ async function testVisualQA(page, fixtures) {
     screen.scrollTop = screen.scrollHeight;
 
     // Check all entry items and cards
-    const items = screen.querySelectorAll('.entry-item, .card, .skincare-product-row');
+    const items = screen.querySelectorAll('.entry-item, .card');
     const hidden = [];
     for (const item of items) {
       const r = item.getBoundingClientRect();
@@ -3008,7 +3008,7 @@ async function testVisualQA(page, fixtures) {
   assert(allLabeled, `All nav tabs have text labels (${navLabels.map(n => n.text || '""').join(', ')})`);
 
   // 6. Check all panels for content clipping — switch to each panel, scroll to bottom
-  for (const panel of ['fitness', 'skin']) {
+  for (const panel of ['fitness']) {
     const panelBtn = await page.$(`.today-seg-btn[data-panel="${panel}"]`);
     if (panelBtn) {
       await panelBtn.click();
@@ -3023,10 +3023,10 @@ async function testVisualQA(page, fixtures) {
         screen.scrollTop = screen.scrollHeight;
 
         // Find last visible content element in this panel
-        const panelEl = document.getElementById(`panel-${panelName}`) || document.getElementById(`today-${panelName === 'skin' ? 'skincare' : 'workout'}`);
+        const panelEl = document.getElementById(`panel-${panelName}`) || document.getElementById('today-workout');
         if (!panelEl) return { ok: true, panel: panelName };
 
-        const children = panelEl.querySelectorAll('.card, .skincare-product-row, .fitness-exercise, button');
+        const children = panelEl.querySelectorAll('.card, .fitness-exercise, button');
         let lastVisible = null;
         for (const child of children) {
           const r = child.getBoundingClientRect();
@@ -7301,34 +7301,7 @@ async function testInsightRenders(page, fixtures) {
   if (insightsBtnRestore) await insightsBtnRestore.click();
   await page.waitForTimeout(500);
 
-  // ── 11. _computeSkincareStreak — today pct===null starts from yesterday ──
-  const skincareStreakNullToday = await page.evaluate(() => {
-    // If today has pct === null, streak should ignore it and count from yesterday
-    const adherenceWithNullToday = [
-      { date: '2026-03-28', pct: 100 },
-      { date: '2026-03-29', pct: 100 },
-      { date: '2026-03-30', pct: 100 },
-      { date: '2026-03-31', pct: null },  // today: no data yet
-    ];
-    const streak = ProgressView._computeSkincareStreak(adherenceWithNullToday);
-    // Should count 3 (the three 100% days before today's null)
-    return { streak };
-  });
-  assert(skincareStreakNullToday.streak === 3, `_computeSkincareStreak: today pct===null skips to yesterday (got streak=${skincareStreakNullToday.streak}, want 3)`);
-
-  // Confirm: if null is in the middle (not just today), it breaks the streak
-  const skincareStreakNullMiddle = await page.evaluate(() => {
-    const adherence = [
-      { date: '2026-03-28', pct: 100 },
-      { date: '2026-03-29', pct: null },  // gap in the middle
-      { date: '2026-03-30', pct: 100 },
-      { date: '2026-03-31', pct: 100 },
-    ];
-    const streak = ProgressView._computeSkincareStreak(adherence);
-    // Starts from last entry (100), goes back: 100 → null breaks → streak = 2
-    return { streak };
-  });
-  assert(skincareStreakNullMiddle.streak === 2, `_computeSkincareStreak: null in middle breaks streak (got ${skincareStreakNullMiddle.streak}, want 2)`);
+  // ── 11. _computeSkincareStreak removed — skincare feature deprecated
 
   // ── 12. renderTimeline — startDate === endDate does not divide by zero ────
   const timelineEqualDates = await page.evaluate(() => {
@@ -8006,7 +7979,7 @@ async function run() {
     await safeRun(testScoreCentering, page, fixtures);
     await safeRun(testMultiViewport, page, context, fixtures);
     await safeRun(testBugRegressions, page, fixtures);
-    await safeRun(testSkincarePanel, page, fixtures);
+    // testSkincarePanel removed — skincare feature deprecated
     await safeRun(testFitnessPanel, page, fixtures);
     await safeRun(testDailiesManager, page, fixtures);
     await safeRun(testDailiesDeletionPersists, page, fixtures);
@@ -8015,7 +7988,7 @@ async function run() {
     await safeRun(testChallenges, page, context, fixtures);
     await safeRun(testChallengeConfirmationFlow, page, context, fixtures);
     await safeRun(testChallengeCustomBuilder, page, context, fixtures);
-    await safeRun(testSkincareOnboarding, page, context, fixtures);
+    // testSkincareOnboarding removed — skincare feature deprecated
     await safeRun(testMultiUserGeneralization, page, context, fixtures);
     await safeRun(testPhotoComparison, page, context, fixtures);
     await page.waitForTimeout(500); // Allow renderer to settle after photo blob operations

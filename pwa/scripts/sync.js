@@ -9,24 +9,26 @@ const Sync = {
     }
 
     const files = [];
-    // Include skincare log for the day so processing can analyze adherence
-    const skincareLog = await DB.getSkincareLog(date);
-    const logWithSkincare = skincareLog
-      ? { ...data.log, skincare: skincareLog }
-      : data.log;
-    const logJson = JSON.stringify(logWithSkincare, null, 2);
+    const logJson = JSON.stringify(data.log, null, 2);
     files.push({ name: `daily/${date}/log.json`, data: new TextEncoder().encode(logJson) });
 
     // Bundle user profile so processing uses actual targets + profile survives reinstalls
     const goals = await DB.getProfile('goals');
     if (goals) {
       const hc = goals.hardcore || {};
+      // Derive carb/fat targets from actual calorie budget rather than generic defaults.
+      // At e.g. 850 cal / 100g protein: remaining = 450 cal → ~68g carbs, ~18g fat.
+      const calTarget = goals.calories || 2000;
+      const proteinG = goals.protein || 100;
+      const remainingCal = Math.max(0, calTarget - proteinG * 4);
+      const carbsG = Math.round((remainingCal * 0.60) / 4);
+      const fatG = Math.round((remainingCal * 0.35) / 9);
       const goalsJson = JSON.stringify({
-        calories: { daily: goals.calories || 2000, adjustment: 'User-configured goal' },
+        calories: { daily: calTarget, adjustment: 'User-configured goal' },
         macros: {
-          protein: { grams: goals.protein || 100, priority: 'high' },
-          carbs: { grams: 200, priority: 'medium' },
-          fat: { grams: 70, priority: 'low' },
+          protein: { grams: proteinG, priority: 'high' },
+          carbs: { grams: carbsG, priority: 'medium' },
+          fat: { grams: fatG, priority: 'low' },
         },
         water: { daily_oz: goals.water_oz || 64 },
         fiber: { daily_g: goals.fiber || 25 },
@@ -45,7 +47,6 @@ const Sync = {
         supplements: await DB.getProfile('supplements'),
         bodyPhotoTypes: await DB.getProfile('bodyPhotoTypes'),
         moreOptions: await DB.getProfile('moreOptions'),
-        skincare: await DB.getSkincareRoutine(),
         preferences: await DB.getProfile('preferences'),
       };
       files.push({ name: `profile/pwa-profile.json`, data: new TextEncoder().encode(JSON.stringify(pwaProfile, null, 2)) });

@@ -19,8 +19,8 @@ You are generating a meal plan and workout regimen based on today's health data.
    - `{EXTRACT_DIR}/profile/preferences.json` -- dietary preferences, meal structure
    - `{DATA_DIR}/profile/regimen.json` -- baseline workout program (phases, equipment, weekly schedule)
    - `{DATA_DIR}/profile/identity.md` -- immutable identity facts, equipment constraints (optional)
-   - `{DATA_DIR}/profile/current-stats.json` -- **source of truth for current weight, trends, streaks** (computed artifact, regenerated every processing cycle)
-   - DEPRECATED — do not read: `bio.txt`, `measurements.json` (drift issues; body stats come from current-stats.json)
+   - `{DATA_DIR}/profile/current-stats.json` -- **source of truth for current weight, trends, streaks** (computed every cycle)
+   - DEPRECATED — do not read: `bio.txt`, `measurements.json`
    - Recent analysis files at `{DATA_DIR}/analysis/` for the past 3-7 days -- for workout weekly review
 
 2b. **Check for coach-requested plan changes:**
@@ -30,31 +30,23 @@ You are generating a meal plan and workout regimen based on today's health data.
    - **Injury-driven exercise requests:** If a coachResponse or coach-todos entry mentions adding specific exercises due to injury or rehab (e.g., neck strengthening after a strain), those exercises must appear in the generated regimen -- even if `_planRequested` is false. Check `{DATA_DIR}/coach-todos.json` for pending items and `{DATA_DIR}/profile/regimen.json` for whether they were already added. If already in regimen.json, preserve them in the output regimen exactly. If not yet added, add them now in the warmup section of the relevant days.
 
 3. **Generate a rolling 3-day meal plan:**
-   - **FIRST: check for coach-session commits and preserve them.** Before generating anything, gather ALL sources of coach-session plans:
-     1. **Today's current analysis file** at `{DATA_DIR}/analysis/{DATE}.json` -- if it already has a `mealPlan` with top-level `source` starting `coach-session`, **preserve the ENTIRE mealPlan verbatim and skip meal plan generation entirely**. Do not regenerate ANY day. A coach-session meal plan is authoritative until manually replaced.
-     2. **Yesterday's analysis file** at `{DATA_DIR}/analysis/<yesterday>.json` -- iterate its `mealPlan.days[]`. For each day with `source` starting `coach-session` AND date is today or future, copy that day's entry verbatim into today's output mealPlan.
-     3. **Timeline** at `{DATA_DIR}/profile/timeline.json` -- recent entries (last 7 days) with `type: "preference"` or `type: "meal-plan"` referencing a specific date are authoritative intent. If a plan for that date exists per rule 1 or 2, honor it; if not and the entry describes what the plan should be, build per the entry.
-   - **Precedence when rules conflict:** rule 1 (today's file) > rule 2 (yesterday's file) > rule 3 (timeline) > fresh generation.
+   - **FIRST: check for coach-session commits and preserve them.** Before generating anything:
+     1. **Today's current analysis file** -- if it already has a `mealPlan` with top-level `source` starting `coach-session`, **preserve the ENTIRE mealPlan verbatim and skip meal plan generation entirely**. Do not regenerate ANY day. A coach-session meal plan is authoritative until manually replaced.
+     2. **Yesterday's analysis file** at `{DATA_DIR}/analysis/<yesterday>.json` -- iterate its `mealPlan.days[]`. For each day with `source` starting `coach-session` AND date is today or future, copy that day verbatim into today's output mealPlan.
    - For any date NOT covered by coach-session preservation above, generate fresh per the rules below.
-   - **Read `preferences.json`** -- it defines meal structure (meals per day, office vs home day split, OMAD rules, snack policy). Follow it exactly.
+   - **Tag every generated day with `"source": "phase-2-processing"`.** Coach-session commits use `"source": "coach-session"`. This is how the preservation check above works across runs.
+   - **Read `preferences.json` first** -- it defines meal structure (meals per day, office vs home day split, OMAD rules, snack policy). Follow it exactly.
    - The first day is today. Use `totals` from the Phase 1 analysis to set `days[0].remaining_meal` accurately -- the user has already consumed `totals.calories` calories and `totals.protein`g protein today.
    - Next 2 full days after today.
    - Meal count and calorie distribution MUST match preferences (e.g. if 2 meals/day with no snacks, don't generate 3 meals + snacks).
    - Be specific -- real meal names, full ingredient lists with amounts, estimated macros per meal, prep times.
    - Prioritize hitting protein target within the calorie budget.
-   - **Tag every generated day with `"source": "phase-2-processing"`.** Coach-session commits use `"source": "coach-session"`. This is how the preservation check above works across runs.
-   - **Respect preferences.dietary.tunaFlavoringRules and dislikes.** If the user has documented "do not suggest X" rules, never suggest X in any plan. Check `preferences.dietary.dislikes` and any *Rules field for this.
-   - **Protein counting rules.** Check `preferences.dailyStaples.proteinCountingRules` -- it defines how to count protein by source (complete vs. incomplete). Collagen in particular should be discounted ~50% for muscle-preservation math because it lacks tryptophan and is low in leucine. When generating `remaining_meal` protein targets or highlights like "you need Xg more protein today," use USEFUL protein not LABEL protein. Never treat 20g collagen as equivalent to 20g ribeye protein in cut-day coaching.
-   - **Tiered protein targets.** If `goals.json` macros.protein has `floor`, `target`, `reach` fields (tiered), use them instead of a single `grams` value:
-     - Generate plans that hit `target` on average days, pushing to `reach` on lean-protein days (tuna, chicken, shrimp, shake-heavy).
-     - Never let a planned day drop below `floor` -- if the user's remaining budget can't reach `floor`, flag it in `concerns` and propose adjusting tomorrow.
-     - In `goals.protein.status`, report using `target` as the primary threshold: `low` if under `floor`, `on-track` if between `floor` and `target`, `good` if above `target`.
-   - **User-declared prepared meal — backsolve the day.** The daily staples (shake, collagen, psyllium) are the DEFAULT. Do NOT auto-skip them. BUT: if the user has declared a specific prepared meal in advance (via inbox message, coach session, entry notes with `prepared: true`, or an entry logged before eating — e.g. weighed/prepped ribeye at 3:30 PM for a 7 PM dinner), back-solve the rest of the day's budget around that meal. Steps: (a) Estimate the declared meal's calories/protein conservatively (over-count). (b) Subtract from target to get the remaining budget for other meals + staples. (c) If the remaining budget is too tight to fit the shake AND a reasonable other meal, surface that explicitly in `concerns`/`coachResponses`: "Heads up -- ribeye takes up [X] cal. To land under [target], skip the shake today (cut covers your protein) or cut [other meal] by [Y]." Let the USER decide. NEVER silently drop the shake from the plan. Root-cause incident: 2026-04-18 ribeye was declared at 3:36 PM after shake was taken at 3:29 PM. Coach should flag the conflict the moment the prepared meal is declared, not after the fact.
+   - **User-declared prepared meal — backsolve the day.** Daily staples (shake, collagen, psyllium) are the DEFAULT. Do NOT auto-skip them. BUT: if the user has declared a specific prepared meal in advance (inbox message, entry notes, weighed/prepped entry before eating), back-solve the day's budget around that meal and flag conflicts in `concerns`/`coachResponses`. Example: "Heads up -- ribeye takes up [X] cal. To land under [target], skip the shake today or cut [other meal] by [Y]." Let the user decide. Never silently drop the shake.
 
 4. **Generate/update workout regimen:**
    - **Read `regimen.json` first** -- it has the full program (phases, equipment, weekly schedule). Preserve the structure.
    - **Respect equipment constraints.** Read `identity.md` (Equipment Owned section) and `regimen.json` for what equipment the user actually has available. Never prescribe exercises that require equipment they don't own. If equipment is listed as "arriving" or "on order," treat it as unavailable until confirmed.
-   - **Body-weight-dependent math (BMR, TDEE, calorie targets) must pull current weight from `current-stats.json`** — not identity.md, not goals.json, not bio.txt. If current-stats.json is missing, fall back to the newest analysis file's `weight.morning_value`.
+   - **Body-weight-dependent math (BMR, TDEE, calorie targets) must pull current weight from `current-stats.json`** — not identity.md, not goals.json, not bio.txt.
 
    ### Recent Workout History (REQUIRED)
 
@@ -95,7 +87,7 @@ You are generating a meal plan and workout regimen based on today's health data.
 
 Read `{DATA_DIR}/analysis/{DATE}.json`, parse the JSON, add the `mealPlan` and `regimen` keys using the schemas below, and write the entire object back to the same file path.
 
-**CRITICAL: Preserve ALL existing fields exactly as they are.** Do not modify `entries`, `totals`, `goals`, `highlights`, `concerns`, `coachResponses`, `pwaProfile`, `supplementUpdates`, `skincareAdherence`, `streaks`, `_planRequested`, `_planStale`, or any other field. Only add `mealPlan` and `regimen`.
+**CRITICAL: Preserve ALL existing fields exactly as they are.** Do not modify `entries`, `totals`, `goals`, `highlights`, `concerns`, `coachResponses`, `pwaProfile`, `supplementUpdates`, `streaks`, `_planRequested`, `_planStale`, or any other field. Only add `mealPlan` and `regimen`.
 
 **Do NOT use em dashes, en dashes, or smart quotes** in the JSON output. Use plain hyphens (-), double hyphens (--), and straight quotes ("") instead.
 
@@ -104,11 +96,9 @@ Read `{DATA_DIR}/analysis/{DATE}.json`, parse the JSON, add the `mealPlan` and `
 ```json
 "mealPlan": {
   "generatedDate": "YYYY-MM-DD",
-  "source": "phase-2-processing",
   "days": [
     {
       "date": "YYYY-MM-DD",
-      "source": "phase-2-processing",
       "remaining_meal": { "name": "...", "suggestion": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "prep_time": "..." },
       "meals": [
         {

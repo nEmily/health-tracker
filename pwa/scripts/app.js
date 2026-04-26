@@ -786,7 +786,7 @@ const App = {
 
       // Load day boundary preference before anything uses UI.today()
       const prefs = await DB.getProfile('preferences');
-      if (prefs?.dayBoundaryHour) {
+      if (prefs != null && prefs.dayBoundaryHour !== undefined) {
         UI._dayBoundaryHours = prefs.dayBoundaryHour;
         App.selectedDate = UI.today(); // Re-derive with correct boundary
       }
@@ -1116,15 +1116,6 @@ const App = {
       } catch (e) { console.warn('Workout render error:', e); workoutEl.innerHTML = ''; }
     }
 
-    // Skincare panel
-    const skincareEl = document.getElementById('today-skincare');
-    if (skincareEl) {
-      try {
-        skincareEl.innerHTML = await SkinCareView.render(date);
-        SkinCareView.bindEvents(date);
-      } catch (e) { console.warn('Skincare render error:', e); skincareEl.innerHTML = ''; }
-    }
-
     // Meal suggestion card (collapsible)
     const mealSuggEl = document.getElementById('today-meal-suggestion');
     if (mealSuggEl) {
@@ -1274,18 +1265,6 @@ const App = {
       }
     }
 
-    // Skincare routine planning section
-    const skincareEl = document.getElementById('coach-skincare');
-    if (skincareEl) {
-      try {
-        const profile = await DB.getSkincareRoutine();
-        skincareEl.innerHTML = SkincareCoach.renderSection(profile);
-        SkincareCoach.bindEvents(skincareEl, profile);
-      } catch (e) {
-        console.warn('Skincare coach section error:', e);
-        skincareEl.innerHTML = '';
-      }
-    }
   },
 
   _getGreeting() {
@@ -1500,6 +1479,9 @@ const App = {
       const resp = await fetch(`${pairBase}/pair/${code}`);
       if (resp.ok) {
         const data = await resp.json();
+        if (!data.relay || !data.syncKey) {
+          throw new Error('Invalid pairing response from server');
+        }
         const workerUrl = /^(10|192\.168|100)\.\d/.test(location.hostname) ? location.origin : data.relay;
         await CloudRelay.saveConfig({ workerUrl, syncKey: data.syncKey });
         UI.toast('Sync connected');
@@ -2192,7 +2174,7 @@ const Settings = {
     const select = document.getElementById('day-boundary-select');
     if (!select) return;
     const prefs = await DB.getProfile('preferences') || {};
-    select.value = String(prefs.dayBoundaryHour || 0);
+    select.value = String(prefs.dayBoundaryHour ?? 4);
     // Prevent stacking listeners on repeated Settings visits
     if (!select._boundaryBound) {
       select._boundaryBound = true;

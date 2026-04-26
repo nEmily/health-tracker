@@ -60,13 +60,6 @@ function openDB() {
         }
       }
 
-      // Skincare daily logs (v3)
-      if (e.oldVersion < 3) {
-        if (!db.objectStoreNames.contains('skincare')) {
-          db.createObjectStore('skincare', { keyPath: 'date' });
-        }
-      }
-
       // Challenges (v4)
       if (e.oldVersion < 4) {
         if (!db.objectStoreNames.contains('challenges')) {
@@ -485,9 +478,6 @@ async function importAnalysis(dateStr, data) {
         profileStore.put({ key: 'moreOptions', value: merged });
       }
     }
-    if (data.pwaProfile.skincare) {
-      profileStore.put({ key: 'skincare', value: data.pwaProfile.skincare });
-    }
     if (data.pwaProfile.preferences) {
       profileStore.put({ key: 'preferences', value: data.pwaProfile.preferences });
     }
@@ -864,114 +854,6 @@ async function getAnalysisHistory(dateStr) {
   });
 }
 
-// --- Skincare Profile ---
-
-async function getSkincareRoutine() {
-  return getProfile('skincare');
-}
-
-async function setSkincareRoutine(data) {
-  return setProfile('skincare', data);
-}
-
-async function getSkincareProducts() {
-  const routine = await getProfile('skincare');
-  return routine ? (routine.products || []) : [];
-}
-
-async function addSkincareProduct(product) {
-  let routine = await getProfile('skincare');
-  if (!routine) {
-    routine = { weeklyTemplate: { default: { am: [], pm: [] }, overrides: {} }, rotations: [], products: [] };
-  }
-  if (!routine.products) routine.products = [];
-  routine.products.push(product);
-  return setProfile('skincare', routine);
-}
-
-// --- Skincare Daily Log ---
-
-async function getSkincareLog(dateStr) {
-  const db = await openDB();
-  const tx = db.transaction('skincare', 'readonly');
-  const request = tx.objectStore('skincare').get(dateStr);
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
-
-async function updateSkincareLog(dateStr, data) {
-  const db = await openDB();
-  const record = { ...data, date: dateStr };
-  const tx = db.transaction('skincare', 'readwrite');
-  tx.objectStore('skincare').put(record);
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(record);
-    tx.onerror = (e) => reject(e.target.error);
-  });
-}
-
-// --- Skincare Rotation Resolver ---
-
-function resolveRoutineForDate(skincareProfile, dateStr) {
-  if (!skincareProfile || !skincareProfile.weeklyTemplate) {
-    return { am: [], pm: [] };
-  }
-
-  const template = skincareProfile.weeklyTemplate;
-  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const date = new Date(dateStr + 'T00:00:00');
-  const dayName = dayNames[date.getDay()];
-
-  // Start with defaults
-  let am = [...(template.default.am || [])];
-  let pm = [...(template.default.pm || [])];
-
-  // Apply day-specific overrides
-  if (template.overrides && template.overrides[dayName]) {
-    const override = template.overrides[dayName];
-    if (override.am) am = [...override.am];
-    if (override.pm) pm = [...override.pm];
-  }
-
-  // Apply rotations
-  const rotations = skincareProfile.rotations || [];
-  // Reference date for computing day index (epoch start)
-  const refDate = new Date('2024-01-01T00:00:00');
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const dayIndex = Math.floor((date.getTime() - refDate.getTime()) / msPerDay);
-
-  for (const rotation of rotations) {
-    const slot = rotation.slot; // 'am' or 'pm'
-    const position = rotation.position;
-    const items = rotation.items || [];
-    if (items.length === 0) continue;
-
-    let activeItem;
-    if (rotation.pattern === 'alternate') {
-      activeItem = items[((dayIndex % items.length) + items.length) % items.length];
-    } else if (rotation.pattern === 'weekly') {
-      // Items have day assignments: find which item is assigned to this day
-      const match = items.find(item =>
-        item.days && item.days.includes(dayName)
-      );
-      if (match) {
-        activeItem = match.key || match.name;
-      }
-    }
-
-    if (activeItem !== undefined) {
-      const arr = slot === 'am' ? am : pm;
-      if (position >= 0 && position < arr.length) {
-        arr[position] = activeItem;
-      }
-    }
-  }
-
-  return { am, pm };
-}
-
 // --- Challenges ---
 
 async function getChallenges(status) {
@@ -1161,12 +1043,6 @@ window.DB = {
   getRegimen,
   saveRegimen,
   exportDay,
-  getSkincareRoutine,
-  setSkincareRoutine,
-  getSkincareProducts,
-  addSkincareProduct,
-  getSkincareLog,
-  updateSkincareLog,
   getChallenges,
   getActiveChallenges,
   getChallenge,
@@ -1178,6 +1054,3 @@ window.DB = {
   clearCoachHistory,
 };
 
-window.Skincare = {
-  resolveRoutineForDate,
-};

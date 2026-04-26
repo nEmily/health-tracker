@@ -73,7 +73,6 @@ Database: `health-tracker` (v4)
 | `profile` | `key` | — |
 | `mealPlan` | `generatedDate` | — |
 | `analysisHistory` | `id` | date, importedAt |
-| `skincare` | `date` | — |
 | `challenges` | `id` | status, startDate |
 | `challengeProgress` | `id` | challengeId, date |
 
@@ -154,11 +153,6 @@ Canonical output written to `analysis/YYYY-MM-DD.json` by processing. Do not han
   "highlights": ["..."],
   "concerns": ["..."],
   "streaks": { "tracking": 0, "calorie_goal": 0, "protein_goal": 0 },
-  "skincareAdherence": {
-    "am": { "completed": 4, "total": 4, "skipped": [] },
-    "pm": { "completed": 2, "total": 3, "skipped": ["retinol"] }
-  },
-
   "coachResponses": [
     { "replyTo": "coach_msgid", "text": "Response to user's question", "timestamp": 0 }
   ],
