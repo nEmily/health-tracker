@@ -47,8 +47,9 @@ function Send-DiscordEmbed($title, $description, $color) {
         $tmpScript = Join-Path $env:TEMP "watcher-discord-$PID-$(Get-Random).js"
         $tmpPayload = Join-Path $env:TEMP "watcher-discord-$PID-$(Get-Random).json"
         Set-Content -Path $tmpPayload -Value $payload -Encoding UTF8
-        $escWebhook = $webhookPath.Replace('\','\\')
-        $escPayload = $tmpPayload.Replace('\','\\')
+        # Use JSON.stringify-safe escaping: backslashes and single quotes
+        $escWebhook = $webhookPath.Replace('\','\\').Replace("'","\'")
+        $escPayload = $tmpPayload.Replace('\','\\').Replace("'","\'")
         $js = @"
 const https = require('https');
 const fs = require('fs');

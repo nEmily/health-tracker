@@ -1479,6 +1479,9 @@ const App = {
       const resp = await fetch(`${pairBase}/pair/${code}`);
       if (resp.ok) {
         const data = await resp.json();
+        if (!data.relay || !data.syncKey) {
+          throw new Error('Invalid pairing response from server');
+        }
         const workerUrl = /^(10|192\.168|100)\.\d/.test(location.hostname) ? location.origin : data.relay;
         await CloudRelay.saveConfig({ workerUrl, syncKey: data.syncKey });
         UI.toast('Sync connected');
