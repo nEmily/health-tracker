@@ -805,16 +805,18 @@ async function getDatesNeedingSync() {
     req.onsuccess = () => resolve(req.result);
     req.onerror = (e) => reject(e.target.error);
   });
-  // Entry types that processing intentionally skips — don't flag these as "missing" from analysis
-  const skipTypes = new Set(['bodyPhoto', 'weight']);
+  // bodyPhoto: skip entirely — uploads fine via queueUpload but never needs analysis
+  // weight: include for upload/staleness tracking, but don't check IDs against analysis.entries
+  const noUploadTypes = new Set(['bodyPhoto']);
+  const noAnalysisTypes = new Set(['bodyPhoto', 'weight']);
   const entryDateInfo = {};
   for (const e of entries) {
-    if (!e.date) continue;
+    if (!e.date || noUploadTypes.has(e.type)) continue;
     if (!entryDateInfo[e.date]) entryDateInfo[e.date] = { ids: new Set(), maxTs: 0 };
-    if (!skipTypes.has(e.type)) {
+    const ts = e.updatedAt ? new Date(e.updatedAt).getTime() : (e.timestamp ? new Date(e.timestamp).getTime() : 0);
+    entryDateInfo[e.date].maxTs = Math.max(entryDateInfo[e.date].maxTs, ts);
+    if (!noAnalysisTypes.has(e.type)) {
       entryDateInfo[e.date].ids.add(e.id);
-      const ts = e.updatedAt ? new Date(e.updatedAt).getTime() : (e.timestamp ? new Date(e.timestamp).getTime() : 0);
-      entryDateInfo[e.date].maxTs = Math.max(entryDateInfo[e.date].maxTs, ts);
     }
   }
 
