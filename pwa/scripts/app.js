@@ -1060,11 +1060,11 @@ const App = {
       App.setSetupMode(false);
       // Merge AI results into entry cards using the already-loaded analysis
       let analysisMap = {};
+      const dayImportedAt = (analysis && analysis.importedAt) || 0;
       try {
         if (analysis && analysis.entries) {
-          const importedAt = analysis.importedAt || 0;
           for (const ae of analysis.entries) {
-            if (ae.id) analysisMap[ae.id] = { ...ae, _importedAt: importedAt };
+            if (ae.id) analysisMap[ae.id] = { ...ae, _importedAt: dayImportedAt };
           }
         }
       } catch (err) {
@@ -1075,7 +1075,7 @@ const App = {
       entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       entries.forEach(entry => {
         const ae = analysisMap[entry.id] || null;
-        entryList.appendChild(UI.renderEntryItem(entry, ae));
+        entryList.appendChild(UI.renderEntryItem(entry, ae, dayImportedAt));
       });
     }
 
