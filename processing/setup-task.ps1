@@ -1,22 +1,36 @@
 # Health Tracker — Task Scheduler setup
-# Run this once (elevated) to register both tasks
+# Run this once (elevated) to register the watcher task.
+#
+# Note: Uses schtasks.exe instead of PowerShell Register-ScheduledTask cmdlets.
+# The -Once + -RepetitionInterval + -RepetitionDuration combo in the PowerShell
+# cmdlets produces malformed XML on some Windows versions (HRESULT 0x80041318),
+# making the task impossible to query or remove. schtasks.exe is reliable.
 
 # Derive processing dir from script location
 $projectDir = $PSScriptRoot
-
-# --- Watcher: polls relay every 30 min, processes if pending ---
 $watcherPath = Join-Path $projectDir 'watcher.ps1'
-$watcherAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$watcherPath`""
-$watcherTrigger = New-ScheduledTaskTrigger -Once -At '00:00' -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Days 365)
-$watcherSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 
-# Remove old tasks if they exist
-Unregister-ScheduledTask -TaskName 'CoachWatcher' -Confirm:$false -ErrorAction SilentlyContinue
-Unregister-ScheduledTask -TaskName 'HealthTrackerWatcher' -Confirm:$false -ErrorAction SilentlyContinue
-Unregister-ScheduledTask -TaskName 'HealthTrackerNightly' -Confirm:$false -ErrorAction SilentlyContinue
-Unregister-ScheduledTask -TaskName 'Health Tracker Nightly' -Confirm:$false -ErrorAction SilentlyContinue
+# Ensure PowerShell profile scripts can run (needed for the coach alias).
+# RemoteSigned: local scripts run freely; downloaded scripts need a signature.
+$policy = Get-ExecutionPolicy -Scope CurrentUser
+if ($policy -eq 'Restricted' -or $policy -eq 'Undefined') {
+    Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+    Write-Output "Set ExecutionPolicy to RemoteSigned for current user."
+}
 
-Register-ScheduledTask -TaskName 'CoachWatcher' -Action $watcherAction -Trigger $watcherTrigger -Settings $watcherSettings -Description 'Polls coach relay every 30 min, processes pending data with Claude'
+# Remove old tasks if they exist (ignore errors if they don't)
+schtasks /Delete /TN "CoachWatcher" /F 2>$null | Out-Null
+schtasks /Delete /TN "HealthTrackerWatcher" /F 2>$null | Out-Null
+schtasks /Delete /TN "HealthTrackerNightly" /F 2>$null | Out-Null
+
+# Register task using schtasks CLI (/SC MINUTE /MO 30 = every 30 minutes)
+$trArg = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$watcherPath`""
+$result = schtasks /Create /TN "CoachWatcher" /TR $trArg /SC MINUTE /MO 30 /F 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to register CoachWatcher task. Try running as Administrator."
+    Write-Error $result
+    exit 1
+}
 
 Write-Output "Registered CoachWatcher - runs every 30 minutes."
 Write-Output "Make sure HEALTH_SYNC_URL and HEALTH_SYNC_KEY are set as user environment variables."

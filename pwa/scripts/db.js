@@ -190,6 +190,16 @@ async function getEntriesByType(type, startDate, endDate) {
   });
 }
 
+async function getAllEntries() {
+  const db = await openDB();
+  const tx = db.transaction('entries', 'readonly');
+  const request = tx.objectStore('entries').getAll();
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
 async function hasAnyEntries() {
   const db = await openDB();
   const tx = db.transaction('entries', 'readonly');
@@ -206,6 +216,23 @@ async function updateEntry(entry) {
   tx.objectStore('entries').put(entry);
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(entry);
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function updatePhotoDate(photoId, newDate) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('photos', 'readwrite');
+    const store = tx.objectStore('photos');
+    const req = store.get(photoId);
+    req.onsuccess = () => {
+      const photo = req.result;
+      if (photo && photo.date !== newDate) {
+        store.put({ ...photo, date: newDate });
+      }
+    };
+    tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
   });
 }
@@ -1017,11 +1044,13 @@ async function clearCoachHistory() {
 window.DB = {
   openDB,
   addEntry,
+  getAllEntries,
   getEntriesByDate,
   getEntriesByDateRange,
   getEntriesByType,
   hasAnyEntries,
   updateEntry,
+  updatePhotoDate,
   addPhotosToEntry,
   deleteEntry,
   getDailySummary,

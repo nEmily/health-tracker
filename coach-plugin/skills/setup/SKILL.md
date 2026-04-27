@@ -82,6 +82,13 @@ The CLAUDE.md defines HOW Coach operates — data location, session behavior, an
 Detect the user's shell and add the alias. The alias should cd to the coach folder (current directory) and start Claude.
 
 **PowerShell (Windows):**
+
+First, ensure PowerShell profile scripts can run (Windows ships with Restricted by default — the profile won't load without this):
+```powershell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+```
+
+Then add the alias:
 ```powershell
 $coachDir = (Get-Location).Path
 if (-not (Test-Path (Split-Path $PROFILE))) { New-Item -ItemType Directory -Path (Split-Path $PROFILE) -Force | Out-Null }
@@ -228,6 +235,8 @@ echo "Pairing code: $CODE"
 
 The onboarding page is the single source for phone installation. It shows a QR code + fallback link. The user scans it, installs the app to their home screen, then enters the pairing code.
 
+**Browser compatibility note:** Coach must be installed through **Safari (iPhone/iPad)** or **Chrome (Android)**. Firefox does not support PWA installation and the app will not display correctly — goals and the full UI won't load. If the user is on Firefox, redirect them to the right browser before proceeding.
+
 **Step C — Give the user the 4-digit code:**
 "Once the app is open on your phone, it'll ask for a pairing code. Enter: **{CODE}**"
 
@@ -268,7 +277,23 @@ curl -s -X POST "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/day/YYYY-MM-DD/done" \
   -d @analysis/YYYY-MM-DD.json
 ```
 
-After it completes: "Check your phone — your goals should be there now. Pull down to refresh if needed."
+**Verify the push populated `/results/new`** — this is the endpoint the PWA polls. A successful POST response doesn't guarantee the result entry was created:
+```bash
+sleep 2
+RESULTS=$(curl -s "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/results/new")
+if echo "$RESULTS" | grep -q "YYYY-MM-DD"; then
+    echo "Verified: data is in /results/new"
+else
+    echo "Not yet in /results/new — pushing again..."
+    curl -s -X POST "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/day/YYYY-MM-DD/done" \
+      -H "Content-Type: application/json" \
+      -d @analysis/YYYY-MM-DD.json
+fi
+```
+
+Note: only `POST /sync/{key}/day/{date}/done` creates result entries (what the app polls). A `PUT /sync/{key}/day/{date}` stores data but does NOT populate `/results/new` — the app won't see it.
+
+After confirming: "Check your phone — your goals should be there now. Pull down to refresh if needed."
 
 ### 9. Set up processing
 
@@ -284,8 +309,12 @@ If they choose **automatic**, walk them through the scheduled task setup:
 **IMPORTANT:** Run `watcher.sh`/`watcher.ps1` (not `process-day` directly) — the watcher handles pending-data checks, quiet hours, and lock management.
 
 **Windows — they'll need to paste this in an elevated PowerShell (Run as Administrator):**
+
+Use `schtasks.exe` instead of `Register-ScheduledTask`. The PowerShell cmdlet's `-Once + -RepetitionInterval + -RepetitionDuration` combo produces malformed XML on some Windows versions (HRESULT 0x80041318), making the task impossible to query or modify later.
+
+Replace `COACH_DIR` with the actual path first, then run:
 ```powershell
-$a = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"COACH_DIR\processing\watcher.ps1`""; $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Days 3650); $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName "CoachWatcher" -Action $a -Trigger $t -Settings $s -Description "Coach - processes health data every 30 min"
+schtasks /Create /TN "CoachWatcher" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File \"COACH_DIR\processing\watcher.ps1\"" /SC MINUTE /MO 30 /F
 ```
 
 **Mac/Linux:**

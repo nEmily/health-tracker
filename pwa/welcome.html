@@ -302,6 +302,20 @@
       .phone-only { display: block; }
       .computer-only { display: none; }
     }
+
+    /* Firefox warning */
+    .browser-warning {
+      background: #2d1e00;
+      border: 1px solid #d29922;
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #e3b341;
+      display: none;
+      line-height: 1.5;
+    }
+    .browser-warning strong { color: #f0c060; }
   </style>
 </head>
 <body>
@@ -376,6 +390,11 @@
       </div>
     </div>
 
+    <!-- Firefox warning (shown only on Firefox) -->
+    <div class="browser-warning" id="firefox-warning">
+      <strong>Firefox is not supported for PWA installation.</strong> The app won't display correctly — goals and the full UI won't load. Please open this page in <strong>Safari</strong> (iPhone/iPad) or <strong>Chrome</strong> (Android) to install Coach.
+    </div>
+
     <!-- Step 2: Phone Setup -->
     <div class="section" id="section-pair">
       <div class="section-label">Step 2 — Set up on your phone</div>
@@ -407,6 +426,13 @@
     const isIOS = /iPad|iPhone|iPod/.test(ua);
     const isAndroid = /Android/.test(ua);
     const isMac = /Mac/.test(ua) && !isIOS;
+    const isFirefox = /Firefox\//.test(ua) && !/Seamonkey\//.test(ua);
+
+    // Show Firefox warning — Firefox doesn't support PWA install and the app won't work correctly
+    if (isFirefox) {
+      const warn = document.getElementById('firefox-warning');
+      if (warn) warn.style.display = 'block';
+    }
 
     // Tab switching
     document.querySelectorAll('.platform-tab').forEach(tab => {

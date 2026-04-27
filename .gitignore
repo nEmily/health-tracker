@@ -68,3 +68,4 @@ coach/profile/identity.md
 coach/profile/current-stats.json
 
 # Generated icons (keep SVG source, ignore generated PNGs if any)
+processing/scripts/__pycache__/
