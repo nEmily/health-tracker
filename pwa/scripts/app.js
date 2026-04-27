@@ -182,56 +182,71 @@ const QuickLog = {
       { label: 'XL jug', oz: 64 },
     ];
 
-    sheet.innerHTML = `
-      <div class="modal-header">
-        <span class="modal-title">Add Water</span>
-        <button class="modal-close" id="wp-close" aria-label="Close">&times;</button>
-      </div>
-      <div style="text-align: center; margin-bottom: var(--space-md); color: var(--text-secondary); font-size: var(--text-sm);">
-        Today: <strong style="color: var(--color-water)">${currentOz} oz</strong> of ${waterGoal} oz goal
-      </div>
-      <div class="water-picker-grid">
-        ${containers.map(c => `
-          <button class="water-pick" data-oz="${c.oz}">
-            <div class="water-pick-oz">${c.oz} oz</div>
-            <div class="water-pick-label">${c.label}</div>
-          </button>
-        `).join('')}
-      </div>
-    `;
+    const renderSheet = (mode) => {
+      const isAdd = mode === 'add';
+      sheet.innerHTML = `
+        <div class="modal-header">
+          <span class="modal-title">Water</span>
+          <button class="modal-close" id="wp-close" aria-label="Close">&times;</button>
+        </div>
+        <div style="text-align: center; margin-bottom: var(--space-md); color: var(--text-secondary); font-size: var(--text-sm);">
+          Today: <strong style="color: var(--color-water)" id="wp-current">${currentOz} oz</strong> of ${waterGoal} oz goal
+        </div>
+        <div class="segment-control" style="margin-bottom: var(--space-md);">
+          <button class="segment-btn${isAdd ? ' active' : ''}" id="wp-mode-add">Add</button>
+          <button class="segment-btn${!isAdd ? ' active' : ''}" id="wp-mode-remove">Remove</button>
+        </div>
+        <div class="water-picker-grid">
+          ${containers.map(c => `
+            <button class="water-pick" data-oz="${c.oz}">
+              <div class="water-pick-oz">${isAdd ? '+' : '-'}${c.oz} oz</div>
+              <div class="water-pick-label">${c.label}</div>
+            </button>
+          `).join('')}
+        </div>
+      `;
+
+      document.getElementById('wp-close').addEventListener('click', closeModal);
+      document.getElementById('wp-mode-add').addEventListener('click', () => renderSheet('add'));
+      document.getElementById('wp-mode-remove').addEventListener('click', () => renderSheet('remove'));
+
+      let waterSaving = false;
+      sheet.querySelectorAll('.water-pick').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (waterSaving) return;
+          waterSaving = true;
+          btn.classList.add('water-pick-saved');
+          const oz = parseInt(btn.dataset.oz);
+          try {
+            const fresh = await DB.getDailySummary(date);
+            const prev = fresh.water_oz || 0;
+            const newTotal = isAdd ? prev + oz : Math.max(0, prev - oz);
+            await DB.updateDailySummary(date, { water_oz: newTotal });
+            const sign = isAdd ? '+' : '-';
+            const actual = isAdd ? oz : Math.min(oz, prev);
+            UI.toast(`${sign}${actual} oz — ${newTotal} oz total`);
+            CloudRelay.queueUpload(date);
+            setTimeout(() => {
+              closeModal();
+              App.loadDayView();
+            }, 300);
+          } catch (err) {
+            console.error('Quick water failed:', err);
+            UI.toast('Failed to save water', 'error');
+            waterSaving = false;
+            btn.classList.remove('water-pick-saved');
+          }
+        });
+      });
+    };
 
     overlay.appendChild(sheet);
     document.body.appendChild(overlay);
 
     const closeModal = () => overlay.remove();
-    document.getElementById('wp-close').addEventListener('click', closeModal);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
 
-    let waterSaving = false;
-    sheet.querySelectorAll('.water-pick').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (waterSaving) return;
-        waterSaving = true;
-        const oz = parseInt(btn.dataset.oz);
-        btn.classList.add('water-pick-saved');
-        try {
-          const fresh = await DB.getDailySummary(date);
-          const newTotal = (fresh.water_oz || 0) + oz;
-          await DB.updateDailySummary(date, { water_oz: newTotal });
-          UI.toast(`+${oz} oz — ${newTotal} oz total`);
-          CloudRelay.queueUpload(date);
-          setTimeout(() => {
-            closeModal();
-            App.loadDayView();
-          }, 300);
-        } catch (err) {
-          console.error('Quick water failed:', err);
-          UI.toast('Failed to save water', 'error');
-          waterSaving = false;
-          btn.classList.remove('water-pick-saved');
-        }
-      });
-    });
+    renderSheet('add');
   },
 
   // --- Quick weight modal ---
