@@ -329,11 +329,37 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
     - Bad: "Protein at 50g is dangerously low — you've only hit half your target"
     - Don't treat a mid-day snapshot as a final report.
 
+## Meal Planning Principles
+
+When generating meal plans or evaluating the day's food, always optimize in this priority order:
+
+1. **Calories** — staying at or under the daily target is non-negotiable. Never exceed to hit other goals.
+2. **Fiber** — hit 25g daily.
+3. **Protein** — hit the target within the calorie budget. Sacrifice protein before exceeding calories.
+
+**Collagen is nice-to-have, not mandatory.** If the calorie budget is tight, collagen is the first thing to drop. It adds 80 cal for 10g useful protein (label 20g, 50% discount) — good when there's room, skippable when there isn't.
+
+### Meal Plan Format Rules
+
+- **Each meal is its own entry** with a distinct `meal` label (morning, pre-lunch, lunch, pre-dinner, dinner, snack, bedtime, etc.). Never lump two protein shakes together or combine unrelated items into one meal block.
+- **Psyllium is always its own entry**, labeled "Psyllium (30 min before [meal name])". Never fold it into an adjacent meal. Timing note must be in the description.
+- **Protein shakes are their own meal slot** — not combined with food meals unless consumed at the same sitting.
+- **Cooked weights for meat** — always specify cooked/post-cooking weight (e.g., "chicken thigh, 100g cooked weight — weigh after poaching"). Never list raw weights for proteins the user will weigh after cooking.
+
+## Coach Session — Reading Analysis Files
+
+When querying analysis JSON in a live coach session:
+
+- **Use pre-computed `totals` and `goals.*.remaining` fields** — don't re-sum from entries. The cron already computed these correctly.
+- **Never filter entries by type** when trying to understand what was consumed. The type enum includes `meal`, `snack`, `drink`, `custom`, `supplement`, `workout` and may grow. Filtering by type silently drops entries.
+- If you must iterate entries (e.g. to display a list), filter on `calories > 0` and exclude `type == 'workout'` — not on a hardcoded type allowlist.
+
 ## Important
 
-- **Read ALL profile files** (goals.json, preferences.json) before generating output. Goal targets and meal structure come from these files — never hardcode or assume defaults.
+- **Read ALL profile files** (goals.json, preferences.json, regimen.json) before generating output. Goal targets, meal structure, and workout plans come from these files — never hardcode or assume defaults.
 - **Do NOT generate `mealPlan` or `regimen` fields.** These are generated in a separate processing phase. Omit them from the output JSON entirely.
 - Be precise with calorie estimates — use known nutrition data when available (packaged items with visible labels are high confidence)
 - When a photo shows a packaged product, read the label for exact nutrition info
 - Meal photos without notes should still be fully described and estimated
 - Do NOT include body/face photo entries in the analysis — skip them entirely
+- **When a nutrition label is visible in a photo**, extract ALL fields: calories, protein, carbs, fat, fiber, AND micronutrients (sodium, calcium, iron, potassium — and any others shown). If this food exists in `processing/scripts/foods.py` in the repo, update its entry with the label values. If it's a new food, append it following the schema at the top of that file. Use `unit: "serving"` for pre-packaged indivisible items (pouches, cans, bottles); use `unit: "g"` for powders and foods measured by weight. Include `sodium_mg`, `calcium_mg`, `iron_mg`, `potassium_mg` — tracked for micronutrient gap analysis.
