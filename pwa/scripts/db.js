@@ -312,6 +312,16 @@ async function getDailySummary(dateStr) {
   });
 }
 
+async function getAllDailySummaries() {
+  const db = await openDB();
+  const tx = db.transaction('dailySummary', 'readonly');
+  const request = tx.objectStore('dailySummary').getAll();
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
 async function getDailySummaryRange(startDate, endDate) {
   const db = await openDB();
   const tx = db.transaction('dailySummary', 'readonly');
@@ -1054,6 +1064,7 @@ window.DB = {
   addPhotosToEntry,
   deleteEntry,
   getDailySummary,
+  getAllDailySummaries,
   getDailySummaryRange,
   updateDailySummary,
   getPhotos,

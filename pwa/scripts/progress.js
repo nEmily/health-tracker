@@ -1,7 +1,9 @@
-// progress.js -- Progress tab: Insights / Trends segments
+// progress.js -- Progress tab: Insights / Trends / Fitness segments
 
 const ProgressView = {
   _tab: 'insights',
+  _fitnessSort: 'recent', // 'recent' | 'overdue' | 'category' | 'session'
+  _fitnessCache: null,    // cached aggregated exercise history
 
   async init() {
     const container = document.getElementById('progress-container');
@@ -16,6 +18,7 @@ const ProgressView = {
         <button class="segment-btn${activeTab === 'plan' ? ' active' : ''}" data-ptab="plan">Plan</button>
         <button class="segment-btn${activeTab === 'trends' ? ' active' : ''}" data-ptab="trends">Trends</button>
         <button class="segment-btn${activeTab === 'challenges' ? ' active' : ''}" data-ptab="challenges">Challenges</button>
+        <button class="segment-btn${activeTab === 'fitness' ? ' active' : ''}" data-ptab="fitness">Fitness</button>
       </div>
     `;
 
@@ -27,6 +30,8 @@ const ProgressView = {
       html += await ProgressView.renderTrends();
     } else if (activeTab === 'challenges') {
       html += await Challenges.renderActive(container, App.selectedDate);
+    } else if (activeTab === 'fitness') {
+      html += await ProgressView.renderFitness();
     }
 
     container.innerHTML = html;
@@ -101,6 +106,23 @@ const ProgressView = {
     // Wire challenge events (Challenges tab)
     if (activeTab === 'challenges') {
       Challenges.bindEvents(container);
+    }
+
+    // Wire fitness sort buttons
+    if (activeTab === 'fitness') {
+      container.querySelectorAll('.fitness-sort-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          ProgressView._fitnessSort = btn.dataset.sort;
+          ProgressView.init();
+        });
+      });
+      // Wire exercise history expand/collapse
+      container.querySelectorAll('.fh-exercise-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const hist = card.querySelector('.fh-history');
+          if (hist) hist.style.display = hist.style.display === 'none' ? 'block' : 'none';
+        });
+      });
     }
   },
 
@@ -498,6 +520,182 @@ const ProgressView = {
     </div>`;
     html += '</div>';
     return html;
+  },
+
+  // --- Fitness History ---
+  // Category mapping for exercises
+  _exerciseCategories: {
+    core: ['cable crunches','cable pallof press','pallof press','hanging leg raises','hanging knee raises','plank','dead bugs','bicycle crunches','leg raises','plank shoulder taps','bird dogs','ab wheel rollouts','reverse crunches','v-sits','stomach vacuums','hollow body hold'],
+    upper: ['push-ups','dumbbell rows','dumbbell overhead press','dumbbell bench press','pull-up negatives','resistance band pull-aparts','dumbbell bicep curls','tube band rows','dumbbell floor press','tube band overhead press','tube band pull-aparts','tube band tricep pushdowns','cable rows','lat pulldowns','face pulls','bench press','overhead press','tricep pushdowns','seated dumbbell overhead press','incline dumbbell press','cable lateral raises','barbell bench press'],
+    lower: ['goblet squats','lunges','romanian deadlifts','bodyweight squats','kettlebell swings','step-up lunges','glute bridges','calf raises','banded squats','banded glute bridges','banded lateral walks','banded donkey kicks','banded fire hydrants','bulgarian split squats','barbell back squats','barbell romanian deadlifts','walking lunges','leg press','kettlebell goblet squats','dumbbell romanian deadlifts'],
+  },
+
+  _getExerciseCategory(name) {
+    const lower = name.toLowerCase();
+    for (const [cat, list] of Object.entries(ProgressView._exerciseCategories)) {
+      if (list.some(k => lower.includes(k) || k.includes(lower))) return cat;
+    }
+    return 'other';
+  },
+
+  // Aggregate all exercise history from dailySummary records
+  async _buildFitnessHistory() {
+    if (ProgressView._fitnessCache) return ProgressView._fitnessCache;
+    const all = await DB.getAllDailySummaries();
+    const map = {}; // exerciseName → [{date, sets}]
+
+    for (const summary of all.sort((a, b) => a.date.localeCompare(b.date))) {
+      if (!summary.fitness_sets) continue;
+      for (const [exName, sets] of Object.entries(summary.fitness_sets)) {
+        if (!Array.isArray(sets) || !sets.some(s => s.done)) continue;
+        if (!map[exName]) map[exName] = [];
+        map[exName].push({ date: summary.date, sets });
+      }
+    }
+
+    ProgressView._fitnessCache = map;
+    return map;
+  },
+
+  async renderFitness() {
+    const today = UI.today();
+    const history = await ProgressView._buildFitnessHistory();
+    const sort = ProgressView._fitnessSort;
+
+    // 7-day workout activity strip
+    const stripDays = 7;
+    const activityStrip = [];
+    for (let i = stripDays - 1; i >= 0; i--) {
+      const d = new Date(today + 'T12:00:00');
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 1);
+      const hadWorkout = Object.values(history).some(sessions =>
+        sessions.some(s => s.date === dateStr)
+      );
+      activityStrip.push({ dateStr, label, hadWorkout });
+    }
+
+    let html = `
+      <div class="fh-strip">
+        ${activityStrip.map(d => `
+          <div class="fh-strip-day${d.hadWorkout ? ' worked-out' : ''}">
+            <div class="fh-strip-dot"></div>
+            <div class="fh-strip-label">${d.label}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="fh-sort-row">
+        <button class="fh-sort-btn${sort === 'recent' ? ' active' : ''}" data-sort="recent">Recent</button>
+        <button class="fh-sort-btn${sort === 'overdue' ? ' active' : ''}" data-sort="overdue">Overdue</button>
+        <button class="fh-sort-btn${sort === 'category' ? ' active' : ''}" data-sort="category">Category</button>
+        <button class="fh-sort-btn${sort === 'session' ? ' active' : ''}" data-sort="session">By Day</button>
+      </div>
+    `;
+
+    if (Object.keys(history).length === 0) {
+      html += `<div class="card" style="text-align:center; padding:var(--space-lg); color:var(--text-muted);">
+        <div style="font-size:var(--text-sm);">Log workouts to see your history here.</div>
+      </div>`;
+      return html;
+    }
+
+    if (sort === 'session') {
+      // Group all exercises by date (session view)
+      const sessionMap = {}; // date → [{exName, sets}]
+      for (const [exName, sessions] of Object.entries(history)) {
+        for (const session of sessions) {
+          if (!sessionMap[session.date]) sessionMap[session.date] = [];
+          sessionMap[session.date].push({ exName, sets: session.sets });
+        }
+      }
+      const sortedDates = Object.keys(sessionMap).sort((a, b) => b.localeCompare(a));
+      for (const date of sortedDates) {
+        const d = new Date(date + 'T12:00:00');
+        const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+        const exercises = sessionMap[date];
+        html += `<div class="card fh-session-card" style="margin-bottom:var(--space-sm);">
+          <div class="fh-session-date">${label}</div>
+          ${exercises.map(({ exName, sets }) => {
+            const doneSets = sets.filter(s => s.done);
+            const summary = ProgressView._formatSetsSummary(doneSets);
+            return `<div class="fh-session-ex"><span class="fh-session-exname">${UI.escapeHtml(exName)}</span><span class="fh-session-perf">${summary}</span></div>`;
+          }).join('')}
+        </div>`;
+      }
+    } else {
+      // Exercise-centric views (recent, overdue, category)
+      let exercises = Object.entries(history).map(([name, sessions]) => {
+        const last = sessions[sessions.length - 1];
+        const lastDate = new Date(last.date + 'T12:00:00');
+        const daysAgo = Math.round((new Date(today + 'T12:00:00') - lastDate) / 86400000);
+        return { name, sessions, lastDate: last.date, daysAgo, category: ProgressView._getExerciseCategory(name) };
+      });
+
+      if (sort === 'recent') {
+        exercises.sort((a, b) => a.daysAgo - b.daysAgo);
+      } else if (sort === 'overdue') {
+        exercises.sort((a, b) => b.daysAgo - a.daysAgo);
+      } else if (sort === 'category') {
+        const catOrder = { core: 0, upper: 1, lower: 2, other: 3 };
+        exercises.sort((a, b) => (catOrder[a.category] ?? 3) - (catOrder[b.category] ?? 3) || a.daysAgo - b.daysAgo);
+      }
+
+      let currentCat = null;
+      for (const ex of exercises) {
+        if (sort === 'category' && ex.category !== currentCat) {
+          currentCat = ex.category;
+          const catLabel = currentCat.charAt(0).toUpperCase() + currentCat.slice(1);
+          html += `<div class="fh-category-header">${catLabel}</div>`;
+        }
+
+        const lastSession = ex.sessions[ex.sessions.length - 1];
+        const doneSets = lastSession.sets.filter(s => s.done);
+        const lastPerf = ProgressView._formatSetsSummary(doneSets);
+        const daysLabel = ex.daysAgo === 0 ? 'Today' : ex.daysAgo === 1 ? 'Yesterday' : `${ex.daysAgo}d ago`;
+        const overdueClass = ex.daysAgo >= 7 ? ' fh-overdue' : '';
+
+        // Build history rows (all past sessions, newest first, skip last since it's shown in header)
+        const historyRows = ex.sessions.slice().reverse().map(s => {
+          const d = new Date(s.date + 'T12:00:00');
+          const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const perf = ProgressView._formatSetsSummary(s.sets.filter(set => set.done));
+          return `<div class="fh-history-row"><span class="fh-history-date">${dateLabel}</span><span class="fh-history-perf">${perf}</span></div>`;
+        }).join('');
+
+        html += `
+          <div class="card fh-exercise-card${overdueClass}" style="margin-bottom:var(--space-xs);">
+            <div class="fh-exercise-header">
+              <div class="fh-exercise-name">${UI.escapeHtml(ex.name)}</div>
+              <div class="fh-exercise-last${overdueClass}">${daysLabel}</div>
+            </div>
+            <div class="fh-exercise-perf">${lastPerf}</div>
+            <div class="fh-history" style="display:none;">
+              <div class="fh-history-title">${ex.sessions.length} session${ex.sessions.length !== 1 ? 's' : ''}</div>
+              ${historyRows}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Bind sort buttons inline after rendering
+    return html;
+  },
+
+  // Format completed sets into a readable summary e.g. "3×8 @ 25 lbs" or "3×10"
+  _formatSetsSummary(doneSets) {
+    if (!doneSets.length) return '—';
+    const weights = doneSets.map(s => s.weight).filter(Boolean);
+    const reps = doneSets.map(s => s.reps).filter(r => r > 0);
+    const setCount = doneSets.length;
+    const avgReps = reps.length ? Math.round(reps.reduce((a, b) => a + b, 0) / reps.length) : null;
+    const maxWeight = weights.length ? Math.max(...weights) : null;
+
+    let summary = `${setCount}×${avgReps ?? '?'}`;
+    if (maxWeight) summary += ` @ ${maxWeight} lbs`;
+    return summary;
   },
 
   // --- Trends ---

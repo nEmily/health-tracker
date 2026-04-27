@@ -361,6 +361,9 @@
 /* Segment control (Nutrition / Fitness toggle) */
 .segment-control {
   display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
@@ -368,10 +371,15 @@
   margin-bottom: var(--space-md);
 }
 
+.segment-control::-webkit-scrollbar {
+  display: none;
+}
+
 .segment-btn {
-  flex: 1;
+  flex: 0 0 auto;
   padding: var(--space-xs) var(--space-sm);
   border: none;
+  white-space: nowrap;
   border-radius: var(--radius-full);
   background: transparent;
   color: var(--text-muted);
@@ -582,8 +590,220 @@
 }
 
 .fitness-set-row.set-done .fitness-set-label,
-.fitness-set-row.set-done .fitness-set-reps {
+.fitness-set-row.set-done .fitness-set-reps,
+.fitness-set-row.set-done .fitness-set-weight,
+.fitness-set-row.set-done .fitness-set-x {
   opacity: 0.5;
+}
+
+.fitness-set-weight {
+  width: 56px;
+  text-align: center;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 4px;
+  -moz-appearance: textfield;
+}
+
+.fitness-set-weight::-webkit-inner-spin-button,
+.fitness-set-weight::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.fitness-set-x {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.fitness-last-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.fitness-lazy-banner {
+  background: rgba(255, 160, 50, 0.12);
+  border: 1px solid rgba(255, 160, 50, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--accent-orange);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: var(--space-xs) var(--space-sm);
+  margin-bottom: var(--space-sm);
+  text-align: center;
+}
+
+/* Fitness History tab */
+.fh-strip {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.fh-strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.fh-strip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-color);
+}
+
+.fh-strip-day.worked-out .fh-strip-dot {
+  background: var(--accent-green);
+}
+
+.fh-strip-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.fh-sort-row {
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fh-sort-btn {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fh-sort-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.fh-exercise-card {
+  cursor: pointer;
+}
+
+.fh-exercise-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+.fh-exercise-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.fh-exercise-last {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: var(--space-sm);
+}
+
+.fh-exercise-last.fh-overdue {
+  color: var(--accent-orange);
+}
+
+.fh-exercise-perf {
+  font-size: var(--text-xs);
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+.fh-exercise-card.fh-overdue {
+  border-color: rgba(255, 160, 50, 0.25);
+}
+
+.fh-history {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-color);
+}
+
+.fh-history-title {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+}
+
+.fh-history-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: var(--text-xs);
+}
+
+.fh-history-date {
+  color: var(--text-muted);
+}
+
+.fh-history-perf {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.fh-category-header {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin: var(--space-sm) 0 var(--space-xs);
+}
+
+.fh-session-card {
+  margin-bottom: var(--space-sm);
+}
+
+.fh-session-date {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: var(--space-xs);
+}
+
+.fh-session-ex {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: var(--text-sm);
+}
+
+.fh-session-exname {
+  color: var(--text-primary);
+}
+
+.fh-session-perf {
+  color: var(--accent-green);
+  font-weight: 600;
+  font-size: var(--text-xs);
 }
 
 
