@@ -659,12 +659,14 @@ const Log = {
     return new Date().toISOString();
   },
 
-  // Camera captures always log to today (the day you took the photo).
+  // Camera captures log to the boundary-adjusted date of the photo timestamp.
+  // (e.g. a photo taken at 1 AM with a 4 AM boundary goes to the previous day)
   // Gallery picks and non-photo entries log to the selected date.
   _getEntryDate() {
     const firstPhoto = Log.pendingPhotos[0];
     if (firstPhoto?.takenAt) {
-      return firstPhoto.takenAt.slice(0, 10);
+      const d = new Date(new Date(firstPhoto.takenAt).getTime() - UI._dayBoundaryHours * 3600000);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
     return App.selectedDate;
   },

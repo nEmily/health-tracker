@@ -1622,6 +1622,58 @@ const App = {
   },
 
   // One-time cleanup: remove impossible weight values (> 200 lbs) that snuck in
+  // When the day boundary hour changes, entries logged under the old boundary may
+  // show on the wrong date. Re-derive each entry's date from its timestamp using
+  // the new boundary, and update any entries that shifted. Also updates photo dates.
+  async migrateEntryDatesToBoundary(newHours) {
+    function boundaryDate(iso, hours) {
+      const d = new Date(new Date(iso).getTime() - hours * 3600000);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    let allEntries;
+    try {
+      allEntries = await DB.getAllEntries();
+    } catch (e) {
+      console.warn('[boundary migration] Could not load entries:', e);
+      return;
+    }
+
+    const affectedDates = new Set();
+    let migrated = 0;
+
+    for (const entry of allEntries) {
+      if (!entry.timestamp) continue;
+      const newDate = boundaryDate(entry.timestamp, newHours);
+      if (newDate === entry.date) continue;
+
+      affectedDates.add(entry.date);
+      affectedDates.add(newDate);
+
+      try {
+        await DB.updateEntry({ ...entry, date: newDate });
+        // Update associated photo dates (relevant for body photos indexed by date)
+        const photos = await DB.getPhotos(entry.id);
+        for (const photo of photos) {
+          if (photo.date !== newDate) {
+            await DB.updatePhotoDate(photo.id, newDate);
+          }
+        }
+        migrated++;
+      } catch (e) {
+        console.warn(`[boundary migration] Failed to update entry ${entry.id}:`, e);
+      }
+    }
+
+    if (migrated > 0) {
+      console.log(`[boundary migration] Moved ${migrated} entries to match new boundary`);
+      // Re-queue affected dates so processing sees the corrected data
+      for (const date of affectedDates) {
+        if (typeof CloudRelay !== 'undefined') CloudRelay.queueUpload(date);
+      }
+    }
+  },
+
   // as typos (e.g. 1028 instead of 102.8). Sweeps dailySummary.weightLog,
   // dailySummary.weight, and entries of type=weight. Preserves all legitimate
   // multi-weight-per-day logs (values <= 200).
@@ -2196,6 +2248,7 @@ const Settings = {
       select.addEventListener('change', async () => {
         const hour = parseInt(select.value) || 0;
         const fresh = await DB.getProfile('preferences') || {};
+        const oldHour = fresh.dayBoundaryHour ?? 4;
         fresh.dayBoundaryHour = hour;
         await DB.setProfile('preferences', fresh);
         UI._dayBoundaryHours = hour;
@@ -2203,6 +2256,14 @@ const Settings = {
         App.selectedDate = UI.today();
         App.updateHeaderDate();
         UI.toast(`Day starts at ${hour === 0 ? 'midnight' : hour + ' AM'}`);
+        // Retroactively reassign entries whose timestamps fall on a different date
+        // under the new boundary (e.g. 1 AM entry shifts from Apr 6 → Apr 5 when
+        // boundary moves from midnight to 6 AM).
+        if (hour !== oldHour) {
+          App.migrateEntryDatesToBoundary(hour).then(() => {
+            App.loadDayView();
+          }).catch(err => console.warn('[boundary migration] Error:', err));
+        }
       });
     }
   },
