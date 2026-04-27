@@ -37,9 +37,8 @@ import json
 from pathlib import Path
 
 # DATA_DIR: the user's coach data directory.
-# Scripts must be run from that directory (cd to it first), or set COACH_DATA_DIR env var.
-import os
-DATA_DIR = Path(os.environ.get("COACH_DATA_DIR", Path.cwd()))
+# Scripts must be run from that directory — cd there before running.
+DATA_DIR = Path.cwd()
 
 _prefs   = json.loads((DATA_DIR / "profile" / "preferences.json").read_text())
 _staples = _prefs["dailyStaples"]

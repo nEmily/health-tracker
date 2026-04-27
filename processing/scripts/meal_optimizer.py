@@ -21,9 +21,8 @@ import argparse
 import sys
 from pathlib import Path
 
-# Must be run from (or with COACH_DATA_DIR pointing to) the user's coach data directory.
-import os
-DATA_DIR = Path(os.environ.get("COACH_DATA_DIR", Path.cwd()))
+# Must be run from the user's coach data directory — cd there before running.
+DATA_DIR = Path.cwd()
 
 # Add this script's directory to path so `from foods import FOODS` works
 sys.path.insert(0, str(Path(__file__).parent))

@@ -12,8 +12,7 @@ import json
 import sys
 from pathlib import Path
 
-import os
-DATA_DIR = Path(os.environ.get("COACH_DATA_DIR", Path.cwd()))
+DATA_DIR = Path.cwd()
 
 # Add this script's directory to path so `from foods import FOODS` works
 sys.path.insert(0, str(Path(__file__).parent))
