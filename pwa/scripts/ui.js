@@ -266,7 +266,7 @@ const UI = {
   },
 
   // --- Render an entry item ---
-  renderEntryItem(entry, analysisEntry) {
+  renderEntryItem(entry, analysisEntry, dayImportedAt = 0) {
     // Wrapper for swipe-to-delete positioning
     const wrapper = UI.createElement('div', 'entry-swipe-wrap');
     const div = UI.createElement('div', 'entry-item');
@@ -313,7 +313,8 @@ const UI = {
     // so don't show the badge even if localStorage was cleared (common on iOS/Safari).
     const entryTs = new Date(entry.timestamp).getTime();
     const lastSync = (typeof CloudRelay !== 'undefined') ? CloudRelay.getLastSyncTime(entry.date) : 0;
-    const analyzedAt = analysisEntry ? (analysisEntry._importedAt || 0) : 0;
+    // Use dayImportedAt as fallback — covers entry types that processing skips (bodyPhoto, weight)
+    const analyzedAt = dayImportedAt || (analysisEntry ? (analysisEntry._importedAt || 0) : 0);
     if (entryTs > lastSync && entryTs > analyzedAt) {
       const unsynced = UI.createElement('div', 'entry-unsynced');
       unsynced.textContent = 'Pending upload';
