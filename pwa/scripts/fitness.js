@@ -242,6 +242,7 @@ const Fitness = {
     const notes = await Fitness.getWorkoutNotes(date);
     const checked = await Fitness.getCheckedExercises(date);
     const setsData = await Fitness.getSetsData(date);
+    const daysOut = await Fitness.getDaysWithoutWorkout(date);
 
     if (isRest) {
       return `
@@ -265,6 +266,15 @@ const Fitness = {
 
     const exercises = Fitness.getExerciseList(todayPlan);
     let html = '';
+
+    // Lazy indicator — show if 3+ days without a completed workout
+    if (daysOut >= 3) {
+      html += `
+        <div class="fitness-lazy-banner">
+          ${daysOut === 7 ? '7+ days' : `${daysOut} days`} since your last workout. No more rest.
+        </div>
+      `;
+    }
 
     // Day type header — context for what today's workout is
     const typeLabel = todayPlan.type === 'cardio' ? 'Cardio Day' :
@@ -295,20 +305,37 @@ const Fitness = {
         const exKey = ex.name;
         // Get existing set data or build default from plan
         let exSets = setsData[exKey];
+        const lastSession = await Fitness.getLastSessionData(exKey, date);
         if (!exSets || exSets.length !== ex.sets) {
           // Initialize from plan — if exercise was previously checked (old format), mark all sets done
-          exSets = Array.from({ length: ex.sets }, () => ({
+          exSets = Array.from({ length: ex.sets }, (_, si) => ({
             done: isDone,
             reps: ex.reps,
+            weight: lastSession?.sets?.[si]?.weight ?? null,
           }));
         }
-        setRowsHtml = `<div class="fitness-sets">`;
+        // Build last session hint (e.g. "last: 3×8 @ 25 lbs")
+        let lastHint = '';
+        if (lastSession) {
+          const lastDate = new Date(lastSession.date + 'T12:00:00');
+          const daysAgo = Math.round((new Date(date + 'T12:00:00') - lastDate) / 86400000);
+          const daysLabel = daysAgo === 1 ? '1 day ago' : `${daysAgo} days ago`;
+          const lastWeight = lastSession.sets?.find(s => s.weight)?.weight;
+          const lastReps = lastSession.sets?.find(s => s.reps)?.reps;
+          if (lastWeight || lastReps) {
+            lastHint = `<div class="fitness-last-hint">Last (${daysLabel}): ${lastReps ? lastReps + ' reps' : ''}${lastWeight ? ' @ ' + lastWeight + ' lbs' : ''}</div>`;
+          }
+        }
+        setRowsHtml = `<div class="fitness-sets">${lastHint}`;
         for (let s = 0; s < ex.sets; s++) {
           const setDone = exSets[s]?.done || false;
           const setReps = exSets[s]?.reps ?? ex.reps;
+          const setWeight = exSets[s]?.weight ?? '';
           setRowsHtml += `
             <div class="fitness-set-row${setDone ? ' set-done' : ''}" data-exercise="${UI.escapeHtml(exKey)}" data-set="${s}">
               <span class="fitness-set-label">Set ${s + 1}</span>
+              <input type="number" class="fitness-set-weight" value="${setWeight}" placeholder="lbs" inputmode="decimal" min="0" max="9999" step="2.5">
+              <span class="fitness-set-x">×</span>
               <input type="number" class="fitness-set-reps" value="${setReps}" inputmode="numeric" min="0" max="999">
               <button class="fitness-set-check${setDone ? ' checked' : ''}" data-exercise="${UI.escapeHtml(exKey)}" data-set="${s}">${setDone ? '&#x2713;' : ''}</button>
             </div>
@@ -422,10 +449,13 @@ const Fitness = {
           setRows.forEach((row, idx) => {
             const setCheck = row.querySelector('.fitness-set-check');
             const repsInput = row.querySelector('.fitness-set-reps');
+            const weightInput = row.querySelector('.fitness-set-weight');
             const repsVal = repsInput ? parseInt(repsInput.value, 10) || 0 : 0;
+            const weightVal = weightInput ? parseFloat(weightInput.value) || null : null;
             if (!setsData[name][idx]) setsData[name][idx] = {};
             setsData[name][idx].done = newDone;
             setsData[name][idx].reps = repsVal;
+            setsData[name][idx].weight = weightVal;
             if (newDone) {
               row.classList.add('set-done');
               if (setCheck) { setCheck.classList.add('checked'); setCheck.innerHTML = '&#x2713;'; }
@@ -468,7 +498,9 @@ const Fitness = {
         const setIdx = parseInt(btn.dataset.set, 10);
         const setRow = btn.closest('.fitness-set-row');
         const repsInput = setRow?.querySelector('.fitness-set-reps');
+        const weightInput = setRow?.querySelector('.fitness-set-weight');
         const repsVal = repsInput ? parseInt(repsInput.value, 10) || 0 : 0;
+        const weightVal = weightInput ? parseFloat(weightInput.value) || null : null;
 
         const setsData = await Fitness.getSetsData(date);
         if (!setsData[exName]) setsData[exName] = [];
@@ -478,6 +510,7 @@ const Fitness = {
         const nowDone = !wasDone;
         setsData[exName][setIdx].done = nowDone;
         setsData[exName][setIdx].reps = repsVal;
+        setsData[exName][setIdx].weight = weightVal;
 
         // Update set row visuals
         if (nowDone) {
@@ -538,6 +571,33 @@ const Fitness = {
       input.addEventListener('blur', () => {
         clearTimeout(repTimer);
         saveReps();
+      });
+    });
+
+    // Weight input — save on change/blur (debounced)
+    root.querySelectorAll('.fitness-set-weight').forEach(input => {
+      let weightTimer = null;
+      const saveWeight = async () => {
+        const setRow = input.closest('.fitness-set-row');
+        if (!setRow) return;
+        const exName = setRow.dataset.exercise;
+        const setIdx = parseInt(setRow.dataset.set, 10);
+        const weightVal = parseFloat(input.value) || null;
+
+        const setsData = await Fitness.getSetsData(date);
+        if (!setsData[exName]) setsData[exName] = [];
+        if (!setsData[exName][setIdx]) setsData[exName][setIdx] = {};
+        setsData[exName][setIdx].weight = weightVal;
+        await Fitness.saveSetsData(date, setsData);
+      };
+
+      input.addEventListener('change', () => {
+        clearTimeout(weightTimer);
+        weightTimer = setTimeout(saveWeight, 500);
+      });
+      input.addEventListener('blur', () => {
+        clearTimeout(weightTimer);
+        saveWeight();
       });
     });
 
@@ -641,5 +701,38 @@ const Fitness = {
 
   async saveWorkoutNotes(date, notes) {
     await DB.updateDailySummary(date, { fitness_notes: notes });
+  },
+
+  // Return the most recent completed set data for an exercise before a given date
+  async getLastSessionData(exerciseName, beforeDate) {
+    const all = await DB.getAllDailySummaries();
+    const sorted = all
+      .filter(s => s.date < beforeDate && s.fitness_sets && s.fitness_sets[exerciseName])
+      .sort((a, b) => b.date.localeCompare(a.date));
+    if (!sorted.length) return null;
+    return { date: sorted[0].date, sets: sorted[0].fitness_sets[exerciseName] };
+  },
+
+  // Return number of consecutive days (up to 7) with no completed workout before a given date
+  async getDaysWithoutWorkout(beforeDate) {
+    const start = new Date(beforeDate + 'T12:00:00');
+    start.setDate(start.getDate() - 7);
+    const startStr = start.toISOString().slice(0, 10);
+    const summaries = await DB.getDailySummaryRange(startStr, beforeDate);
+    // Walk backwards from yesterday
+    let count = 0;
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(beforeDate + 'T12:00:00');
+      d.setDate(d.getDate() - (i + 1));
+      const dateStr = d.toISOString().slice(0, 10);
+      const summary = summaries.find(s => s.date === dateStr);
+      const hadWorkout = summary?.fitness_sets &&
+        Object.values(summary.fitness_sets).some(sets =>
+          Array.isArray(sets) && sets.some(s => s.done)
+        );
+      if (hadWorkout) break;
+      count++;
+    }
+    return count;
   },
 };
