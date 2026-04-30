@@ -47,6 +47,7 @@ compare_entries.ps1
 compare_entries.sh
 update_apr20.py
 processing/gen_plan.py
+processing/gen_analyses*.py
 test-results/
 
 # Root test dependencies (not part of the app)

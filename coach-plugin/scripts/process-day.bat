@@ -63,14 +63,25 @@ REM PHASE2_FIRST_RUN is re-checked after relay downloads (relay may delete today
 set ZIP_COUNT=0
 set NEW_DATES=
 
-REM --- Download pending data from cloud relay ---
+REM --- Sync config: ALWAYS load from sync-config.json in DATA_DIR.
+REM     Ignore any inherited env vars -- they cause cross-user contamination
+REM     when multiple coach folders share a machine.
+set HEALTH_SYNC_URL=
+set HEALTH_SYNC_KEY=
+if not exist "%DATA_DIR%\sync-config.json" (
+    echo [%TODAY%] No sync-config.json at %DATA_DIR%. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
+    set ZIP_COUNT=0
+    goto :check_local
+)
+for /f "usebackq delims=" %%u in (`powershell -NoProfile -Command "(Get-Content -Raw '%DATA_DIR%\sync-config.json' | ConvertFrom-Json).url"`) do set HEALTH_SYNC_URL=%%u
+for /f "usebackq delims=" %%k in (`powershell -NoProfile -Command "(Get-Content -Raw '%DATA_DIR%\sync-config.json' | ConvertFrom-Json).key"`) do set HEALTH_SYNC_KEY=%%k
 if not defined HEALTH_SYNC_URL (
-    echo [%TODAY%] HEALTH_SYNC_URL not set. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
+    echo [%TODAY%] sync-config.json missing url. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
     set ZIP_COUNT=0
     goto :check_local
 )
 if not defined HEALTH_SYNC_KEY (
-    echo [%TODAY%] HEALTH_SYNC_KEY not set. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
+    echo [%TODAY%] sync-config.json missing key. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
     set ZIP_COUNT=0
     goto :check_local
 )

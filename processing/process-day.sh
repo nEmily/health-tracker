@@ -68,14 +68,19 @@ fi
 ZIP_COUNT=0
 NEW_DATES=()
 
-# --- Check env vars ---
-if [ -z "${HEALTH_SYNC_URL:-}" ]; then
-    echo "[$TODAY] HEALTH_SYNC_URL not set. Cannot sync."
+# --- Sync config: ALWAYS load from sync-config.json in DATA_DIR.
+#     Ignore any inherited env vars -- they cause cross-user contamination
+#     when multiple coach folders share a machine.
+unset HEALTH_SYNC_URL HEALTH_SYNC_KEY
+if [ ! -f "$DATA_DIR/sync-config.json" ]; then
+    echo "[$TODAY] No sync-config.json at $DATA_DIR. Cannot sync."
     rm -f "$LOCK_FILE"
     exit 1
 fi
-if [ -z "${HEALTH_SYNC_KEY:-}" ]; then
-    echo "[$TODAY] HEALTH_SYNC_KEY not set. Cannot sync."
+HEALTH_SYNC_URL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$DATA_DIR/sync-config.json','utf8')).url || '')" 2>/dev/null || python3 -c "import json; print(json.load(open('$DATA_DIR/sync-config.json')).get('url',''))" 2>/dev/null)
+HEALTH_SYNC_KEY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$DATA_DIR/sync-config.json','utf8')).key || '')" 2>/dev/null || python3 -c "import json; print(json.load(open('$DATA_DIR/sync-config.json')).get('key',''))" 2>/dev/null)
+if [ -z "$HEALTH_SYNC_URL" ] || [ -z "$HEALTH_SYNC_KEY" ]; then
+    echo "[$TODAY] sync-config.json missing url or key. Cannot sync."
     rm -f "$LOCK_FILE"
     exit 1
 fi
@@ -143,7 +148,7 @@ echo "[$TODAY] Processing $ZIP_COUNT new days of data..."
 # --- Run Claude Code to process extracted data ---
 echo "[$TODAY] Running Claude Code analysis..."
 CLAUDECODE="" claude -p "Process the health data that has been extracted to $EXTRACT_DIR. Today is $TODAY. The data root is $DATA_DIR. Follow the instructions in $REPO_DIR/processing/process-day-prompt.md. There may be data from multiple days - process each day found." \
-    --model sonnet \
+    --model haiku \
     --dangerously-skip-permissions \
     >> "$DATA_DIR/logs/$TODAY.log" 2>&1 || echo "[$TODAY] WARNING: Claude Code exited with an error. Check log: $DATA_DIR/logs/$TODAY.log"
 
@@ -209,7 +214,7 @@ if [ "$RUN_PHASE2" = "1" ]; then
     if [ -f "$DATA_DIR/analysis/$TODAY.json" ]; then
         echo "[$TODAY] Running Phase 2: plan generation..."
         CLAUDECODE="" claude -p "Generate the meal plan and workout regimen for $TODAY. The data root is $DATA_DIR. The extracted data is at $EXTRACT_DIR. Follow the instructions in $REPO_DIR/processing/plan-prompt.md." \
-            --model sonnet \
+            --model haiku \
             --dangerously-skip-permissions \
             >> "$DATA_DIR/logs/$TODAY.log" 2>&1 \
             && {

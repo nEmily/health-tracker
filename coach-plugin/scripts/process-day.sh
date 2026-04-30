@@ -66,14 +66,19 @@ fi
 ZIP_COUNT=0
 NEW_DATES=()
 
-# --- Check env vars ---
-if [ -z "${HEALTH_SYNC_URL:-}" ]; then
-    echo "[$TODAY] HEALTH_SYNC_URL not set. Cannot sync."
+# --- Sync config: ALWAYS load from sync-config.json in DATA_DIR.
+#     Ignore any inherited env vars -- they cause cross-user contamination
+#     when multiple coach folders share a machine.
+unset HEALTH_SYNC_URL HEALTH_SYNC_KEY
+if [ ! -f "$DATA_DIR/sync-config.json" ]; then
+    echo "[$TODAY] No sync-config.json at $DATA_DIR. Cannot sync."
     rm -f "$LOCK_FILE"
     exit 1
 fi
-if [ -z "${HEALTH_SYNC_KEY:-}" ]; then
-    echo "[$TODAY] HEALTH_SYNC_KEY not set. Cannot sync."
+HEALTH_SYNC_URL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$DATA_DIR/sync-config.json','utf8')).url || '')" 2>/dev/null || python3 -c "import json; print(json.load(open('$DATA_DIR/sync-config.json')).get('url',''))" 2>/dev/null)
+HEALTH_SYNC_KEY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$DATA_DIR/sync-config.json','utf8')).key || '')" 2>/dev/null || python3 -c "import json; print(json.load(open('$DATA_DIR/sync-config.json')).get('key',''))" 2>/dev/null)
+if [ -z "$HEALTH_SYNC_URL" ] || [ -z "$HEALTH_SYNC_KEY" ]; then
+    echo "[$TODAY] sync-config.json missing url or key. Cannot sync."
     rm -f "$LOCK_FILE"
     exit 1
 fi

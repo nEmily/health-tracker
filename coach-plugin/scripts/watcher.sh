@@ -41,10 +41,23 @@ if [ -f "$LOCK_FILE" ]; then
     rm -f "$LOCK_FILE"
 fi
 
-if [ -z "${HEALTH_SYNC_URL:-}" ] || [ -z "${HEALTH_SYNC_KEY:-}" ]; then
-    echo "[watcher] HEALTH_SYNC_URL or HEALTH_SYNC_KEY not set. Exiting."
+# Sync config: per-datadir sync-config.json is the ONLY source of truth.
+# User-level env vars are intentionally NOT supported -- they cause cross-user
+# contamination when multiple coach folders share one machine.
+unset HEALTH_SYNC_URL HEALTH_SYNC_KEY
+CONFIG_PATH="$DATA_DIR/sync-config.json"
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "[watcher] No sync config at $CONFIG_PATH. Exiting."
     exit 0
 fi
+HEALTH_SYNC_URL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG_PATH','utf8')).url || '')" 2>/dev/null || python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('url',''))" 2>/dev/null)
+HEALTH_SYNC_KEY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG_PATH','utf8')).key || '')" 2>/dev/null || python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('key',''))" 2>/dev/null)
+if [ -z "$HEALTH_SYNC_URL" ] || [ -z "$HEALTH_SYNC_KEY" ]; then
+    echo "[watcher] sync-config.json missing url or key. Exiting."
+    exit 0
+fi
+echo "[watcher] Using sync config from $CONFIG_PATH"
+export HEALTH_SYNC_URL HEALTH_SYNC_KEY
 
 PENDING_URL="$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/pending"
 
