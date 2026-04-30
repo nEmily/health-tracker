@@ -70,11 +70,25 @@ if (-not $lockAcquired) {
     exit 1
 }
 
-$syncUrl = [System.Environment]::GetEnvironmentVariable('HEALTH_SYNC_URL', 'User')
-$syncKey = [System.Environment]::GetEnvironmentVariable('HEALTH_SYNC_KEY', 'User')
+# Sync config: per-datadir sync-config.json is the ONLY source of truth.
+# User-level env vars are intentionally NOT supported -- they cause cross-user
+# contamination when multiple coach folders share one machine.
+$syncUrl = $null
+$syncKey = $null
+$configPath = Join-Path $dataDir 'sync-config.json'
+if (Test-Path $configPath) {
+    try {
+        $cfg = Get-Content -Raw $configPath | ConvertFrom-Json
+        $syncUrl = $cfg.url
+        $syncKey = $cfg.key
+        Log "[watcher] Using sync config from $configPath"
+    } catch {
+        Log "[watcher] Failed to parse $configPath : $_"
+    }
+}
 
 if (-not $syncUrl -or -not $syncKey) {
-    Log "[watcher] HEALTH_SYNC_URL or HEALTH_SYNC_KEY not set. Exiting."
+    Log "[watcher] No sync config found at $configPath. Exiting."
     if (Test-Path $lockFile) { Remove-Item $lockFile -Force }
     exit 0
 }

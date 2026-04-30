@@ -65,14 +65,27 @@ REM PHASE2_FIRST_RUN is set true only when no analysis file exists at all for to
 set ZIP_COUNT=0
 set NEW_DATES=
 
-REM --- Download pending data from cloud relay ---
+REM --- Sync config: ALWAYS load from sync-config.json in DATA_DIR.
+REM     Ignore any inherited env vars -- they cause cross-user contamination
+REM     when multiple coach folders share a machine. Watcher.ps1 sets these
+REM     env vars per-run; if running directly without watcher, this overwrites
+REM     whatever was inherited so we use the right keys for this DATA_DIR.
+set HEALTH_SYNC_URL=
+set HEALTH_SYNC_KEY=
+if not exist "%DATA_DIR%\sync-config.json" (
+    echo [%TODAY%] No sync-config.json at %DATA_DIR%. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
+    set ZIP_COUNT=0
+    goto :check_local
+)
+for /f "usebackq delims=" %%u in (`powershell -NoProfile -Command "(Get-Content -Raw '%DATA_DIR%\sync-config.json' | ConvertFrom-Json).url"`) do set HEALTH_SYNC_URL=%%u
+for /f "usebackq delims=" %%k in (`powershell -NoProfile -Command "(Get-Content -Raw '%DATA_DIR%\sync-config.json' | ConvertFrom-Json).key"`) do set HEALTH_SYNC_KEY=%%k
 if not defined HEALTH_SYNC_URL (
-    echo [%TODAY%] HEALTH_SYNC_URL not set. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
+    echo [%TODAY%] sync-config.json missing url. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
     set ZIP_COUNT=0
     goto :check_local
 )
 if not defined HEALTH_SYNC_KEY (
-    echo [%TODAY%] HEALTH_SYNC_KEY not set. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
+    echo [%TODAY%] sync-config.json missing key. Skipping download, checking local data... >>"%DATA_DIR%\logs\%TODAY%.log"
     set ZIP_COUNT=0
     goto :check_local
 )
@@ -108,6 +121,11 @@ if not "!RELAY_DATES!"=="" (
             if exist "%DATA_DIR%\analysis\%%d.json.uploaded" (
                 del "%DATA_DIR%\analysis\%%d.json.uploaded" >nul 2>&1
             )
+            REM Write a reconcile marker: signals that fresh relay data was downloaded for this date.
+            REM Phase 1 prompt uses this to force full entry-ID comparison (catches date-moves and
+            REM race conditions where a concurrent pass wrote a stale analysis before this download).
+            REM Marker is deleted after Phase 1 completes (see cleanup below).
+            echo %TODAY% > "%DATA_DIR%\analysis\%%d.json.reconcile"
             REM If the existing analysis JSON is corrupt, delete it so Claude does a full re-process.
             if exist "%DATA_DIR%\analysis\%%d.json" (
                 powershell -NoProfile -Command "try { ConvertFrom-Json (Get-Content -Raw '%DATA_DIR%\analysis\%%d.json') | Out-Null; exit 0 } catch { exit 1 }"
@@ -158,13 +176,29 @@ if !ZIP_COUNT! equ 0 (
 
 echo [%TODAY%] Processing !ZIP_COUNT! new days of data...
 
+REM --- Build reconcile-dates list to pass to Phase 1 ---
+set RECONCILE_DATES=
+for %%f in ("%DATA_DIR%\analysis\????-??-??.json.reconcile") do (
+    set "RDATE=%%~nf"
+    set "RDATE=!RDATE:.json=!"
+    set RECONCILE_DATES=!RECONCILE_DATES! !RDATE!
+)
+if not "!RECONCILE_DATES!"=="" (
+    echo [%TODAY%] Reconcile markers found for:!RECONCILE_DATES! >>"%DATA_DIR%\logs\%TODAY%.log"
+)
+
 REM --- Run Claude Code to process extracted data ---
 echo [%TODAY%] Running Claude Code analysis...
-call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found." --model sonnet --dangerously-skip-permissions >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found. RECONCILE_DATES (fresh relay download this pass, run mandatory entry reconciliation for these dates even if analysis already exists):!RECONCILE_DATES!" --model haiku --dangerously-skip-permissions >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
 
 echo MARKER:claude-done >>"%DATA_DIR%\logs\%TODAY%.log"
 if errorlevel 1 (
     echo [%TODAY%] WARNING: Claude Code exited with an error. >>"%DATA_DIR%\logs\%TODAY%.log"
+)
+
+REM --- Delete reconcile markers now that Phase 1 has run ---
+for %%f in ("%DATA_DIR%\analysis\????-??-??.json.reconcile") do (
+    del "%%f" >nul 2>&1
 )
 
 echo MARKER:pre-backup >>"%DATA_DIR%\logs\%TODAY%.log"
@@ -236,7 +270,7 @@ if not exist "%DATA_DIR%\analysis\%TODAY%.json" (
 
 REM --- Run Phase 2: Plan Generation ---
 echo [%TODAY%] Running Phase 2: plan generation... >>"%DATA_DIR%\logs\%TODAY%.log"
-call claude -p "Generate the meal plan and workout regimen for %TODAY%. The data root is %DATA_DIR%. The extracted data is at %EXTRACT_DIR%. Follow the instructions in %REPO_DIR%\processing\plan-prompt.md." --model sonnet --dangerously-skip-permissions >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+call claude -p "Generate the meal plan and workout regimen for %TODAY%. The data root is %DATA_DIR%. The extracted data is at %EXTRACT_DIR%. Follow the instructions in %REPO_DIR%\processing\plan-prompt.md." --model haiku --dangerously-skip-permissions >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
 set PHASE2_EXIT=!ERRORLEVEL!
 echo MARKER:phase2-done >>"%DATA_DIR%\logs\%TODAY%.log"
 if !PHASE2_EXIT! neq 0 (

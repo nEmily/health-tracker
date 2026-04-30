@@ -128,23 +128,33 @@ if [ -z "$key" ]; then echo "ERROR: Could not generate UUID. Install uuidgen or 
 echo "$key"
 ```
 
-**Set environment variables** (sync credentials only — data dir is derived from repo location):
+**Write sync-config.json into the data dir.** This is the ONLY place sync credentials live.
+Do NOT set user-level env vars — they cause cross-user contamination on machines with multiple coach folders.
 
-PowerShell (Windows):
-```powershell
-[System.Environment]::SetEnvironmentVariable("HEALTH_SYNC_URL", "https://health-sync.emilyn-90a.workers.dev", "User")
-[System.Environment]::SetEnvironmentVariable("HEALTH_SYNC_KEY", "$key", "User")
+All platforms — write a `sync-config.json` at the data dir root (the same directory that contains `profile/`, `analysis/`, etc.):
+
+```bash
+cat > "$DATA_DIR/sync-config.json" <<JSONEOF
+{
+  "url": "https://health-sync.emilyn-90a.workers.dev",
+  "key": "$key",
+  "user": "$USER_LABEL"
+}
+JSONEOF
 ```
 
-Mac/Linux — write to BOTH .bashrc and .zshrc, with dedup:
+`$USER_LABEL` is a short tag (e.g. `emily`, `michael`) — useful for multi-user machines. If the user doesn't pick one, default to their OS username.
+
+If older user-level env vars exist, REMOVE them now to prevent contamination:
+```powershell
+# PowerShell (Windows)
+[System.Environment]::SetEnvironmentVariable("HEALTH_SYNC_URL", $null, "User")
+[System.Environment]::SetEnvironmentVariable("HEALTH_SYNC_KEY", $null, "User")
+```
 ```bash
-RELAY="https://health-sync.emilyn-90a.workers.dev"
+# Mac/Linux
 for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-    sed -i.bak '/HEALTH_SYNC_URL\|HEALTH_SYNC_KEY/d' "$rc" 2>/dev/null
-    cat >> "$rc" <<ENVEOF
-export HEALTH_SYNC_URL='$RELAY'
-export HEALTH_SYNC_KEY='$key'
-ENVEOF
+    [ -f "$rc" ] && sed -i.bak '/HEALTH_SYNC_URL\|HEALTH_SYNC_KEY/d' "$rc" 2>/dev/null
 done
 ```
 
