@@ -35,6 +35,15 @@ const QuickLog = {
       });
     }
 
+    // BM tracking — opt-in via Settings
+    if (prefs.trackBM) {
+      builtIn.push({
+        type: 'bm', icon: UI.svg.bm, label: 'BM',
+        color: 'var(--color-bm)',
+        desc: 'Tap to log a bowel movement',
+      });
+    }
+
     // User-specific options (added by relay/coach processing)
     const custom = await DB.getProfile('moreOptions') || [];
     const options = [...builtIn, ...custom.map(o => ({
@@ -80,6 +89,9 @@ const QuickLog = {
         } else if (type === 'period') {
           const fresh = await Period.getState();
           if (fresh.active) Period.end(); else Period.start();
+        } else if (type === 'bm') {
+          // One-tap BM log — no form
+          Log.saveBM();
         } else {
           // Show inline form for this type
           const logGrid = document.getElementById('log-type-grid-inline');
@@ -777,7 +789,7 @@ const App = {
       const urlParams = new URLSearchParams(location.search);
       if (urlParams.has('key')) {
         const key = urlParams.get('key');
-        const relay = urlParams.get('relay') || 'https://health-sync.emilyn-90a.workers.dev';
+        const relay = urlParams.get('relay') || '';
         if (key) {
           const existing = await CloudRelay.getConfig() || {};
           if (existing.syncKey !== key) {
@@ -882,6 +894,7 @@ const App = {
       Settings.loadCloudSyncStatus();
       Settings.loadWeightUnit();
       Settings.loadDayBoundary();
+      Settings.loadOptionalTracking();
       Settings.initUpdateButton();
       Settings.loadVersion();
     }
@@ -1490,7 +1503,10 @@ const App = {
 
     try {
       const pairBase = location.hostname === 'localhost' || /^(10|192\.168|100)\.\d/.test(location.hostname)
-        ? location.origin : 'https://health-sync.emilyn-90a.workers.dev';
+        ? location.origin : '';
+      if (!pairBase) {
+        throw new Error('Pairing requires the relay URL — configure Cloud Sync first.');
+      }
       const resp = await fetch(`${pairBase}/pair/${code}`);
       if (resp.ok) {
         const data = await resp.json();
@@ -2266,6 +2282,31 @@ const Settings = {
         }
       });
     }
+  },
+
+  async loadOptionalTracking() {
+    const periodToggle = document.getElementById('toggle-track-period');
+    const bmToggle = document.getElementById('toggle-track-bm');
+    if (!periodToggle && !bmToggle) return;
+
+    const prefs = await DB.getProfile('preferences') || {};
+    if (periodToggle) periodToggle.checked = !!prefs.trackPeriod;
+    if (bmToggle) bmToggle.checked = !!prefs.trackBM;
+
+    const wire = (el, key, label) => {
+      if (!el || el._optBound) return;
+      el._optBound = true;
+      el.addEventListener('change', async () => {
+        const fresh = await DB.getProfile('preferences') || {};
+        fresh[key] = !!el.checked;
+        await DB.setProfile('preferences', fresh);
+        UI.toast(`${label} ${el.checked ? 'on' : 'off'}`);
+        // Refresh Today view so More-grid + log type-grid pick up the change
+        if (typeof App !== 'undefined' && App.loadDayView) App.loadDayView();
+      });
+    };
+    wire(periodToggle, 'trackPeriod', 'Period tracking');
+    wire(bmToggle, 'trackBM', 'BM tracking');
   },
 
   async loadCloudSyncStatus() {

@@ -19,19 +19,37 @@ You are analyzing today's health data exported from the Health Tracker PWA. The 
 
 ### Entry-Level Stability (CRITICAL)
 
-**Photo analyses are frozen after their first pass by default.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly. Exception: if the user edits a nutrition-affecting field (notes/description or replaces the photo), the PWA sets `_reanalyzeRequested: true` on the entry — those entries MUST be re-analyzed in this pass.
+**Photo analyses are frozen permanently after their first pass.** LLM calorie estimates are non-deterministic — re-analyzing the same photo produces different numbers each time, causing values to fluctuate confusingly. The photo's `description` field in the analysis entry is the canonical record of what was in the photo and is never overwritten once written.
+
+**`_reanalyzeRequested: true` means re-estimate nutrition from notes — NOT re-analyze the photo.** The PWA sets this flag when the user edits an entry's notes/description. When you see it:
+- Use the **existing `description`** from the prior analysis entry (the frozen photo analysis). Do NOT re-submit the photo.
+- Re-estimate `calories`, `protein`, `carbs`, `fat`, `fiber` using the existing description + the updated notes from log.json.
+- Set `_reanalyzedAt` on the output entry to today's ISO timestamp.
+
+**`_reanalyzeRequested` is never cleared from the phone** — the flag persists in IndexedDB across all future syncs. Use `_reanalyzedAt` as the guard: if the analysis entry already has `_reanalyzedAt` set and the entry's `updatedAt` (from log.json) is older than `_reanalyzedAt`, the re-estimation has already been done — treat this entry as stable and copy it verbatim.
 
 Merge rules when re-processing a day with an existing analysis file:
 
-- **Entry has `_reanalyzeRequested: true` in log.json** — re-analyze it fully (photo + updated notes → fresh nutrition estimate). The user changed something that affects the calorie/macro estimate (note, description, or photo), so the old analysis is out of date. Overwrite the old analysis entry with the new one.
+- **Entry has `_reanalyzeRequested: true` in log.json AND `_reanalyzedAt` is absent or older than `updatedAt`** — re-estimate nutrition using the existing `description` + updated notes. Do NOT re-analyze the photo. Set `_reanalyzedAt` to now. Overwrite the calorie/macro fields only.
+- **Entry has `_reanalyzeRequested: true` in log.json AND `_reanalyzedAt` is already newer than `updatedAt`** — already handled. Copy verbatim.
 - **Entry exists in both old analysis and new log.json (same `id`, no `_reanalyzeRequested`)** — copy the existing analysis entry verbatim: `description`, `calories`, `protein_g`, `carbs_g`, `fat_g`, etc. Do NOT re-analyze the photo, even if the entry's `updatedAt` is newer than the analysis file. Without `_reanalyzeRequested`, `updatedAt` signals a non-nutrition edit (time, date, subtype) — the food itself is unchanged.
 - **Entry is new (id not in old analysis)** — analyze it fully (photo + notes → nutrition estimate). This also covers the fallback case where an entry has a photo and no prior analysis entry exists (e.g., was pending when the analysis file was first written).
 - **Entry was deleted (id in old analysis but not in new log.json)** — drop it from the new analysis.
 - **After merging**, recalculate `totals` from the final set of entries.
 
-Processing writes fresh analysis for re-analyzed entries. On the next PWA import, `analysis._importedAt` will naturally exceed the entry's `updatedAt`, clearing the "pending re-analysis" UI state. The PWA does not need processing to clear `_reanalyzeRequested` explicitly; leaving it on the entry is harmless (another re-analysis would just produce another fresh estimate).
+### Entry Reconciliation (MANDATORY — runs every pass)
 
-Escape hatches for re-analyzing without a user edit: the user manually deletes the analysis file, OR they submit a correction via `corrections/{DATE}.json` (which overrides specific fields without a full re-analysis).
+**Before writing the final analysis, verify that every non-bodyPhoto entry in `log.json` has a corresponding entry in the output analysis (matched by `id`).** List the IDs from log.json, list the IDs in your output, and confirm they match. If any log.json entries are missing, you MUST analyze and add them before writing — do not skip this check even if you believe the analysis is already complete.
+
+If a date appears in the `RECONCILE_DATES` list passed in the processing prompt, it means fresh data was just downloaded from the relay for that date. For those dates, the entry reconciliation check is especially important — a concurrent processing pass may have written a stale analysis before this download completed.
+
+This catches two real failure modes:
+- **Date-move**: user moved an entry from another day to this one; the entry appears in log.json but not in the existing analysis (which was written before the move).
+- **Race condition**: a concurrent processing pass wrote a stale analysis before the fresh relay data was fully incorporated.
+
+After adding any missing entries, recalculate `totals`.
+
+Escape hatches for full re-analysis (photo included): the user manually deletes the analysis file, OR they submit a correction via `corrections/{DATE}.json`.
 
 ## Weight Typo Detection
 
@@ -163,7 +181,8 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - **Never assume shared meals.** Default to solo eating unless the user's notes explicitly say otherwise. Don't halve portions because a photo shows a serving platter or tongs.
    - **Only count food on the user's plate.** Items visible in the background (e.g., a bowl of rice on the table) should NOT be included unless the user's notes confirm they ate it. Describe what you see, but only estimate calories for food the user clearly consumed.
    - **Photos may show leftovers, not the full meal.** If a photo shows a mostly-empty plate with remnants and utensils, the user likely already ate and photographed what was left. Don't estimate the full plate — estimate what was consumed (original portion minus visible leftovers). When ambiguous, note the uncertainty in the description.
-   - **Photo timestamps are upload times, not meal times.** A photo uploaded at 10 PM does not mean the food was eaten at 10 PM — the user may have photographed it earlier and logged it later. Use the entry's `timestamp` field for meal timing, and if the user manually adjusted the hour, trust that over the photo metadata. Do not call a meal a "late-night snack" or "midnight meal" based solely on upload time.
+   - **Photo timestamps are upload times, not meal times.** A photo uploaded at 10 PM does not mean the food was eaten at 10 PM — the user may have photographed it earlier and logged it later. Use the entry's `timestamp` field for meal timing. Do not call a meal a "late-night snack" or "midnight meal" based solely on upload time.
+   - **Photo source matters — gallery uploads are time-agnostic.** If a food entry's photo was taken via the in-app camera (entry has `photo: true` AND the photo metadata `takenAt` matches the entry `timestamp` closely, within a few minutes), you may assume the food was eaten near the capture time. If the photo was uploaded from the gallery (no live camera capture, or `takenAt` differs significantly from the entry timestamp, or `takenAt` is missing), treat it as time-agnostic — do NOT assume or note when it was eaten. Never speculate about meal timing for gallery-source photos in the description, highlights, or concerns.
    - Write a detailed text description (so the photo can be deleted later)
    - Rate your confidence: high/medium/low
    - Include a breakdown of individual items
@@ -198,6 +217,11 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - Custom entries have `type: 'custom'`, `subtype` (beer/wine/cocktail/shot/etc.), `quantity`, and `calories_est`
    - Include in calorie totals
    - Note impact on daily score and goals (alcohol calories are "empty" -- no protein/useful macros)
+
+4a. **Handle BM entries (`type: 'bm'`):**
+   - Count occurrences for the day. Goal: 1+ per day on average.
+   - Pass through entries verbatim — no calorie/macro analysis. Do not call BM entries "missing analysis."
+   - Optional: include `bm_count` in the daily summary so the coach can monitor transit consistency over time. Multi-day patterns (e.g., 0 BM for 3+ days) may warrant a gentle, matter-of-fact mention in concerns. A single zero-BM day is normal — do not nag.
 
 5. **Calculate daily totals:**
    - Sum calories and macros from all meals AND custom entries (alcohol, etc.)
@@ -331,13 +355,15 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
 
 ## Meal Planning Principles
 
-When generating meal plans or evaluating the day's food, always optimize in this priority order:
+When generating meal plans or evaluating the day's food, optimize in this priority order:
 
-1. **Calories** — staying at or under the daily target is non-negotiable. Never exceed to hit other goals.
-2. **Fiber** — hit 25g daily.
-3. **Protein** — hit the target within the calorie budget. Sacrifice protein before exceeding calories.
+1. **Calories** — stay at or under the daily target. Never exceed to hit other goals.
+2. **Protein** — hit the target. Stop there. Do not pile on extra protein just to fill remaining calories.
+3. **Fiber** — hit 25g. Stop there. Do not add extra psyllium or fiber-dense food to fill calories.
 
-**Collagen is nice-to-have, not mandatory.** If the calorie budget is tight, collagen is the first thing to drop. It adds 80 cal for 10g useful protein (label 20g, 50% discount) — good when there's room, skippable when there isn't.
+**Leave remaining calories as a buffer, not pre-filled food.** After protein and fiber targets are met, leave any remaining calorie headroom (~100-150 cal is typical) explicitly open. Note in the plan what good options are for filling it (e.g., "100 cal remaining — good for: extra edamame, avocado slice, konjac snack, or nothing"). Do not pre-fill with more protein food to hit the calorie ceiling. The user will fill it with what they want.
+
+**Collagen is highly weighted but not mandatory.** Default to including it in plans — it adds 80 cal for 10g useful protein and supports skin/joints. Drop it when: the calorie budget is tight, Emily explicitly says she doesn't want it that day, or another food swap makes more sense. Don't silently omit it without a reason.
 
 ### Meal Plan Format Rules
 

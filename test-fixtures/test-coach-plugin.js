@@ -78,7 +78,7 @@ try {
     assert(setupContent.includes('bash') || setupContent.includes('Bash') || setupContent.includes('zsh'), 'Setup supports Mac/Linux');
     assert(!setupContent.includes('fork') || setupContent.includes('No fork'), 'Setup does not require forking');
     assert(!setupContent.includes('wrangler deploy'), 'Setup does not require Cloudflare account');
-    assert(setupContent.includes('emilyn-90a'), 'Setup has hardcoded relay URL');
+    assert(setupContent.includes('workers.dev'), 'Setup references the workers.dev relay placeholder');
   } else {
     assert(false, 'Setup skill readable (may be gitignored)');
   }

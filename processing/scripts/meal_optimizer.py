@@ -34,13 +34,16 @@ try:
 except ImportError:
     HAS_SCIPY = False
 
-# ── Objective weights ─────────────────────────────────────────────────────────
-# Tune these to change what "optimal" means.
-# protein_useful is primary goal; fiber is secondary.
-# Example: PROTEIN_WEIGHT=1.0, FIBER_WEIGHT=0.3 means
-#   1g protein is worth ~3.3g fiber in the optimizer's eyes.
+# ── Objective ────────────────────────────────────────────────────────────────
+# Default mode (--protein-max passed): MINIMIZE calories.
+#   Constraints enforce protein floor, protein ceiling, fiber target.
+#   Objective just finds the cheapest plan that satisfies all constraints.
+#   Remaining calories are left as buffer — not filled.
+#
+# Legacy maximize mode (no --protein-max): maximize protein+fiber.
+#   Still available but not recommended — overshoots targets.
 PROTEIN_WEIGHT = 1.0
-FIBER_WEIGHT   = 0.8  # raised: once protein target is met, fill with fiber not more protein
+FIBER_WEIGHT   = 0.8
 
 # ── Goals ─────────────────────────────────────────────────────────────────────
 goals_raw  = json.loads((DATA_DIR / "profile" / "goals.json").read_text())
@@ -119,11 +122,12 @@ def print_plan(label, items, budget, rem_protein_floor=None, rem_fiber=None):
 
 # ── Optimizer ─────────────────────────────────────────────────────────────────
 
-def optimize_lp(budget, locked, exclude, top_n, protein_floor=None, fiber_target=None):
+def optimize_lp(budget, locked, exclude, top_n, protein_floor=None, fiber_target=None, protein_max=None):
     """
     LP optimizer via scipy.
     locked: dict of {food_key: fixed_amount} — always included, not optimized
     protein_floor / fiber_target: override globals (used by --eaten mode)
+    protein_max: hard ceiling on total protein_useful (hit target, stop there)
     Returns list of items for the best plan.
     """
     eff_protein_floor = protein_floor if protein_floor is not None else PROTEIN_FLOOR
@@ -145,11 +149,28 @@ def optimize_lp(budget, locked, exclude, top_n, protein_floor=None, fiber_target
     fi_arr = [_per_unit(k)[2] for k in keys]
     maxes  = [FOODS[k]["max_amount"] for k in keys]
 
-    obj = [-(PROTEIN_WEIGHT * p_arr[i] + FIBER_WEIGHT * fi_arr[i]) for i in range(n)]
-
-    A_ub = [c_arr,
-            [-p for p in p_arr]]
+    A_ub = [c_arr,           # calories <= rem_cal
+            [-p for p in p_arr]]  # protein >= rem_prot (floor)
     b_ub = [rem_cal, -rem_prot]
+
+    # Protein ceiling: total protein_useful <= protein_max
+    if protein_max is not None:
+        rem_prot_max = max(0, protein_max - locked_totals["protein_useful"])
+        A_ub.append([p for p in p_arr])
+        b_ub.append(rem_prot_max)
+
+    # Fiber floor: total fiber >= fiber_target (when protein_max is set)
+    if protein_max is not None:
+        rem_fiber_needed = max(0, (fiber_target if fiber_target is not None else FIBER_TARGET) - locked_totals.get("fiber", 0))
+        A_ub.append([-fi for fi in fi_arr])
+        b_ub.append(-rem_fiber_needed)
+
+    if protein_max is not None:
+        # Minimize calories — constraints enforce all targets, objective just minimizes spend
+        obj = [c_arr[i] for i in range(n)]
+    else:
+        # Legacy: maximize protein+fiber (no ceiling set)
+        obj = [-(PROTEIN_WEIGHT * p_arr[i] + FIBER_WEIGHT * fi_arr[i]) for i in range(n)]
 
     bounds = [(0, maxes[i]) for i in range(n)]
 
@@ -181,22 +202,30 @@ def optimize_lp(budget, locked, exclude, top_n, protein_floor=None, fiber_target
     return all_items
 
 
-def optimize_discrete(budget, locked, exclude, top_n, protein_floor=None, fiber_target=None):
+def optimize_discrete(budget, locked, exclude, top_n, protein_floor=None, fiber_target=None, protein_max=None):
     """
     Discrete enumeration fallback (no scipy).
     Tests a grid of portion sizes for each variable food.
+    protein_max: hard ceiling on total protein_useful — plans exceeding it are rejected.
     """
     eff_protein_floor = protein_floor if protein_floor is not None else PROTEIN_FLOOR
 
     locked_items = [_macros(k, v) for k, v in locked.items()]
     locked_t = totals(locked_items)
-    rem_cal  = budget - locked_t["cal"]
+    rem_cal       = budget - locked_t["cal"]
+    rem_prot_max  = (protein_max - locked_t["protein_useful"]) if protein_max is not None else None
+    eff_fiber_tgt = fiber_target if fiber_target is not None else FIBER_TARGET
+    rem_fiber_min = max(0, eff_fiber_tgt - locked_t.get("fiber", 0)) if protein_max is not None else None
 
     keys = [k for k in FOODS if k not in locked and k not in exclude]
 
     def portions(k):
         f = FOODS[k]
         mx = min(f["max_amount"], rem_cal / (_per_unit(k)[0] + 1e-9))
+        if rem_prot_max is not None:
+            p_per_unit = _per_unit(k)[1]
+            if p_per_unit > 0:
+                mx = min(mx, rem_prot_max / p_per_unit * (100 if f["unit"] == "g" else 1))
         if f["unit"] == "g":
             step = 25
             return [0] + list(range(step, int(mx) + 1, step))
@@ -205,40 +234,58 @@ def optimize_discrete(budget, locked, exclude, top_n, protein_floor=None, fiber_
 
     grids = [portions(k) for k in keys]
 
-    candidates = [(0, 0, 0, [])]
+    minimize_cal = protein_max is not None
+    # In minimize-cal mode: score = calories + penalty per gram short on protein floor
+    #                                        + penalty per gram short on fiber target.
+    # Both penalties are equal weight — the beam keeps paths making progress on both
+    # constraints. Among plans that meet both, the one with fewer calories wins.
+    SHORTFALL_PENALTY = 50.0  # cal penalty per gram of protein or fiber still missing
+
+    candidates = [(0, 0, 0, 0, [])]  # (score, used_cal, used_prot, used_fiber, choices)
     for i, k in enumerate(keys):
         new_candidates = []
-        for neg_score, used_cal, neg_prot, choices in candidates:
+        for score, used_cal, used_prot, used_fiber, choices in candidates:
             for amt in grids[i]:
                 c, p, fi = _per_unit(k)
-                new_cal  = used_cal + c * amt
+                new_cal   = used_cal   + c  * amt
+                new_prot  = used_prot  + p  * amt
+                new_fiber = used_fiber + fi * amt
                 if new_cal > rem_cal:
                     continue
-                new_prot = -neg_prot + p * amt
-                new_fi   = sum(
-                    _per_unit(keys[j])[2] * choices[j] for j in range(len(choices))
-                ) + fi * amt
-                score = PROTEIN_WEIGHT * new_prot + FIBER_WEIGHT * new_fi
-                new_candidates.append((-score, new_cal, -new_prot, choices + [amt]))
+                if rem_prot_max is not None and new_prot > rem_prot_max + 0.5:
+                    continue
+                if minimize_cal:
+                    prot_floor_rem = max(0, eff_protein_floor - locked_t["protein_useful"])
+                    prot_gap  = max(0, prot_floor_rem - new_prot)
+                    fiber_gap = max(0, (rem_fiber_min or 0) - new_fiber)
+                    new_score = new_cal + SHORTFALL_PENALTY * (prot_gap + fiber_gap)
+                else:
+                    new_score = -(PROTEIN_WEIGHT * new_prot + FIBER_WEIGHT * new_fiber)
+                new_candidates.append((new_score, new_cal, new_prot, new_fiber, choices + [amt]))
         new_candidates.sort()
-        candidates = new_candidates[:200]
+        candidates = new_candidates[:400]
 
-    best = sorted(candidates)[:top_n]
+    best = sorted(candidates)[:top_n * 5]
     best_items = None
-    for rank, (neg_score, _, neg_prot, choices) in enumerate(best):
+    shown = 0
+    for score, _, used_prot, used_fiber, choices in best:
+        if shown >= top_n:
+            break
         variable_items = []
         for i, k in enumerate(keys):
             if choices[i] > 0:
                 variable_items.append(_macros(k, choices[i]))
         all_items = locked_items + variable_items
         t = totals(all_items)
-        ok = t["protein_useful"] >= eff_protein_floor
-        if ok:
-            print_plan(f"RANK {rank+1}  score={-neg_score:.1f}", all_items, budget,
-                       rem_protein_floor=protein_floor, rem_fiber=fiber_target)
-            if rank == 0:
-                print_review_block(all_items, budget, locked)
-                best_items = all_items
+        if t["protein_useful"] < eff_protein_floor:
+            continue
+        label = f"RANK {shown+1}  {t['cal']} cal" if minimize_cal else f"RANK {shown+1}  score={-score:.1f}"
+        print_plan(label, all_items, budget,
+                   rem_protein_floor=protein_floor, rem_fiber=fiber_target)
+        if shown == 0:
+            print_review_block(all_items, budget, locked)
+            best_items = all_items
+        shown += 1
     return best_items
 
 
@@ -357,6 +404,10 @@ def main():
                         help="Already eaten today — subtracts from budget, shows remaining targets")
     parser.add_argument("--exclude", nargs="*", metavar="FOOD",
                         help="Exclude foods from optimization")
+    parser.add_argument("--protein-max", type=float, default=None,
+                        help="Hard protein ceiling (g) — hit target, stop there. Default: uncapped.")
+    parser.add_argument("--fiber-target", type=float, default=None,
+                        help="Override fiber target (g) for this run. Default: from goals.json.")
     parser.add_argument("--top", type=int, default=3,
                         help="Number of top plans to show (discrete mode only)")
     parser.add_argument("--list-foods", action="store_true",
@@ -387,7 +438,8 @@ def main():
 
     effective_budget  = args.budget - eaten_t["cal"]
     rem_protein_floor = max(0, PROTEIN_FLOOR - eaten_t["protein_useful"])
-    rem_fiber         = max(0, FIBER_TARGET  - eaten_t["fiber"])
+    fiber_goal        = args.fiber_target if args.fiber_target is not None else FIBER_TARGET
+    rem_fiber         = max(0, fiber_goal - eaten_t["fiber"])
 
     if eaten:
         print(f"\nAlready eaten today:")
@@ -399,18 +451,26 @@ def main():
         print(f"\nRemaining budget: {effective_budget} cal  |  "
               f"Protein still needed: {rem_protein_floor}g  |  Fiber still needed: {rem_fiber}g")
 
-    print(f"\nObjective: maximize  {PROTEIN_WEIGHT}×protein_useful + {FIBER_WEIGHT}×fiber")
-    print(f"Budget: {effective_budget} cal  |  Protein floor: {PROTEIN_FLOOR}g  |  Fiber target: {FIBER_TARGET}g")
+    protein_max = args.protein_max
+    if protein_max is not None:
+        print(f"\nObjective: minimize calories  (constraints: protein {PROTEIN_FLOOR}-{protein_max}g, fiber >= {fiber_goal}g)")
+    else:
+        print(f"\nObjective: maximize  {PROTEIN_WEIGHT}×protein_useful + {FIBER_WEIGHT}×fiber")
+    print(f"Budget: {effective_budget} cal  |  Protein floor: {PROTEIN_FLOOR}g  |  Fiber target: {fiber_goal}g")
+    if protein_max is not None:
+        print(f"Protein ceiling: {protein_max}g  (hit target, stop there)")
     print(f"Locked: {locked or 'none'}  |  Excluded: {exclude or 'none'}")
     print(f"Solver: {'scipy LP' if HAS_SCIPY else 'discrete beam search'}\n")
 
     best_items = None
     if HAS_SCIPY:
         best_items = optimize_lp(effective_budget, locked, exclude, args.top,
-                                 protein_floor=rem_protein_floor, fiber_target=rem_fiber)
+                                 protein_floor=rem_protein_floor, fiber_target=rem_fiber,
+                                 protein_max=protein_max)
     else:
         best_items = optimize_discrete(effective_budget, locked, exclude, args.top,
-                                       protein_floor=rem_protein_floor, fiber_target=rem_fiber)
+                                       protein_floor=rem_protein_floor, fiber_target=rem_fiber,
+                                       protein_max=protein_max)
 
     if args.output_json and best_items:
         output_json(best_items, args.budget, args.date)

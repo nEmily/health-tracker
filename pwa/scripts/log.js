@@ -35,7 +35,7 @@ const Log = {
   },
 
   // --- Type Selection ---
-  renderTypeSelector() {
+  async renderTypeSelector() {
     const grid = document.getElementById(Log._gridId);
     if (!grid) return;
 
@@ -47,6 +47,12 @@ const Log = {
       { type: 'weight', icon: UI.svg.weight, label: 'Weight', color: 'var(--color-weight)' },
       { type: 'bodyPhoto', icon: UI.svg.bodyPhoto, label: 'Body Photo', color: 'var(--color-body-photo)' },
     ];
+
+    // Optional tracking — gated on Settings toggles
+    const prefs = await DB.getProfile('preferences') || {};
+    if (prefs.trackBM) {
+      types.push({ type: 'bm', icon: UI.svg.bm, label: 'BM', color: 'var(--color-bm)' });
+    }
 
     grid.innerHTML = types.map(t => `
       <button class="type-btn" data-type="${t.type}" style="--type-color: ${t.color}">
@@ -103,6 +109,8 @@ const Log = {
     // Water and weight use the same modals as quick actions (no duplicate forms)
     if (type === 'water') { Log.hideForm(); QuickLog.showWaterPicker(); return; }
     if (type === 'weight') { Log.hideForm(); QuickLog.showWeightEntry(); return; }
+    // BM is a one-tap log — no form, just save immediately
+    if (type === 'bm') { Log.hideForm(); Log.saveBM(); return; }
 
     switch (type) {
       case 'meal':
@@ -763,6 +771,29 @@ const Log = {
       Log._afterSave();
     } catch (err) {
       console.error('Save body photos failed:', err);
+      UI.toast('Failed to save', 'error');
+    }
+  },
+
+  async saveBM() {
+    try {
+      const date = App.selectedDate;
+      const entry = {
+        id: UI.generateId('bm'),
+        type: 'bm',
+        subtype: null,
+        date,
+        timestamp: new Date().toISOString(),
+        notes: 'Logged',
+        photo: false,
+        duration_minutes: null,
+      };
+      await DB.addEntry(entry);
+      UI.toast('BM logged');
+      CloudRelay.queueUpload(date);
+      Log._afterSave();
+    } catch (err) {
+      console.error('Save BM failed:', err);
       UI.toast('Failed to save', 'error');
     }
   },

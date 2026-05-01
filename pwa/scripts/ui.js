@@ -114,6 +114,7 @@ const UI = {
     camera: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="16" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8.5 5L9.5 3h5l1 2"/></svg>`,
     gallery: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`,
     period: `<svg viewBox="0 0 24 24" fill="none" stroke="var(--color-period)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2 2"/></svg>`,
+    bm: `<svg viewBox="0 0 24 24" fill="none" stroke="var(--color-bm)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 10"/></svg>`,
     lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>`,
     mic: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/></svg>`,
   },
@@ -135,7 +136,7 @@ const UI = {
       meal: 'Food', snack: 'Food', drink: 'Food',
       workout: 'Workout', water: 'Water', weight: 'Weight',
       bodyPhoto: 'Body Photo', custom: 'Alcohol', vice: 'Alcohol', sleep: 'Sleep',
-      supplement: 'Supplement',
+      supplement: 'Supplement', bm: 'BM',
     };
     return labels[type] || type;
   },
@@ -498,29 +499,6 @@ const UI = {
     }
 
     const isBodyPhoto = entry.type === 'bodyPhoto';
-    const isFoodEntry = ['meal', 'snack', 'drink'].includes(entry.type);
-
-    // Build hour picker options for food entries
-    let hourPickerHtml = '';
-    if (isFoodEntry) {
-      const entryDate = new Date(entry.timestamp);
-      const currentHour = entryDate.getHours();
-      const hourOptions = [];
-      for (let h = 0; h < 24; h++) {
-        const ampm = h < 12 ? 'AM' : 'PM';
-        const display = h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
-        const selected = h === currentHour ? ' selected' : '';
-        hourOptions.push(`<option value="${h}"${selected}>${display}</option>`);
-      }
-      hourPickerHtml = `
-        <div class="form-group" style="margin-bottom: var(--space-md);">
-          <label class="form-label">Time eaten</label>
-          <select class="form-input" id="edit-hour" style="min-height:44px; font-size:var(--text-base);">
-            ${hourOptions.join('')}
-          </select>
-        </div>
-      `;
-    }
 
     let photoHtml = '';
     if (photoUrls.length > 0) {
@@ -573,7 +551,6 @@ const UI = {
           <input type="date" class="form-input" id="edit-date" value="${entry.date}" style="flex:1;"${isBodyPhoto ? ' disabled' : ''}>
         </div>
       </div>
-      ${hourPickerHtml}
       ${entry.type === 'weight' ? `
         <div class="form-group" style="margin-bottom: var(--space-md);">
           <label class="form-label">Weight (${entry.weight_unit || 'lbs'})</label>
@@ -795,21 +772,9 @@ const UI = {
           }
         }
       }
-      // Hour picker for food entries — update the hour portion of the timestamp
-      let hourChanged = false;
-      const hourSelect = document.getElementById('edit-hour');
-      if (hourSelect) {
-        const newHour = parseInt(hourSelect.value);
-        const ts = new Date(entry.timestamp);
-        if (newHour !== ts.getHours()) {
-          ts.setHours(newHour);
-          updated.timestamp = ts.toISOString();
-          hourChanged = true;
-        }
-      }
       // Only set updatedAt if something actually changed
       const notesChanged = notes !== (entry.notes || '');
-      const changed = notesChanged || newDate !== oldDate || hourChanged
+      const changed = notesChanged || newDate !== oldDate
         || (entry.type === 'workout' && updated.duration_minutes !== entry.duration_minutes)
         || (entry.type === 'weight' && updated.weight_value !== entry.weight_value);
       if (changed) {
