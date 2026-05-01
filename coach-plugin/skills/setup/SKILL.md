@@ -116,7 +116,7 @@ The relay URL is shared (all users use the same Cloudflare Worker). The user onl
 
 **Relay URL constant** (used in all commands below):
 ```
-RELAY_URL = https://health-sync.emilyn-90a.workers.dev
+RELAY_URL = https://health-sync.<your-subdomain>.workers.dev
 ```
 Note: all users share this relay. Data is isolated by sync key.
 
@@ -136,14 +136,14 @@ All platforms — write a `sync-config.json` at the data dir root (the same dire
 ```bash
 cat > "$DATA_DIR/sync-config.json" <<JSONEOF
 {
-  "url": "https://health-sync.emilyn-90a.workers.dev",
+  "url": "https://health-sync.<your-subdomain>.workers.dev",
   "key": "$key",
   "user": "$USER_LABEL"
 }
 JSONEOF
 ```
 
-`$USER_LABEL` is a short tag (e.g. `emily`, `michael`) — useful for multi-user machines. If the user doesn't pick one, default to their OS username.
+`$USER_LABEL` is a short tag (e.g. `alice`, `partner`) — useful for multi-user machines. If the user doesn't pick one, default to their OS username.
 
 If older user-level env vars exist, REMOVE them now to prevent contamination:
 ```powershell
@@ -232,7 +232,7 @@ This is the immediate next step after the conversation. You already generated th
 Register a temporary pairing code with the relay. The code expires in 15 minutes.
 ```bash
 CODE=$(printf '%04d' $((RANDOM % 10000)))
-RELAY="https://health-sync.emilyn-90a.workers.dev"
+RELAY="https://health-sync.<your-subdomain>.workers.dev"
 EXPIRES=$(date -u -d '+15 minutes' +%s000 2>/dev/null || date -u -v+15M +%s000)
 curl -s -X PUT "$RELAY/pair" \
   -H "Content-Type: application/json" \

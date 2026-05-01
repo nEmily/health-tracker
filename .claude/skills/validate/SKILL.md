@@ -5,12 +5,12 @@ End-to-end verification that the PWA works correctly. Six phases: static checks,
 ## Quick Run
 
 ```bash
-cd C:\Users\emily\projects\health-tracker
+cd "$(git rev-parse --show-toplevel)"
 
 # Phase 1: Static checks (fast, no browser)
 for f in pwa/scripts/*.js pwa/sw.js; do node --check "$f" 2>&1; done
 node coach-plugin/generate-sdk.js && git diff --exit-code coach-plugin/coach-sdk.md || echo "FAIL: coach-sdk.md is stale — run node coach-plugin/generate-sdk.js and commit the result"
-diff -u processing/process-day-prompt.md coach-plugin/scripts/process-day-prompt.md > /dev/null && echo "prompt drift: OK" || echo "FAIL: processing/process-day-prompt.md and coach-plugin/scripts/process-day-prompt.md have diverged — sync them"
+diff processing/process-day-prompt.md coach-plugin/scripts/process-day-prompt.md > /dev/null && echo "prompt drift: OK" || echo "FAIL: \`processing/process-day-prompt.md\` and \`coach-plugin/scripts/process-day-prompt.md\` must stay byte-identical. Edit the \`processing/\` version and copy to the coach-plugin path."
 diff -u processing/plan-prompt.md coach-plugin/scripts/plan-prompt.md > /dev/null && echo "plan-prompt drift: OK" || echo "FAIL: processing/plan-prompt.md and coach-plugin/scripts/plan-prompt.md have diverged — sync them"
 for f in processing/process-day.bat processing/process-day.sh coach-plugin/scripts/process-day.bat coach-plugin/scripts/process-day.sh; do claude_calls=$(grep -c 'claude -p' "$f"); model_flags=$(grep -c -- '--model' "$f"); [ "$claude_calls" = "$model_flags" ] || echo "FAIL: $f has $claude_calls claude -p call(s) but $model_flags --model flag(s) — missing pin risks silent Opus upgrade"; done; echo "model pin check done"
 
@@ -207,7 +207,7 @@ Uses the Claude Chrome extension (MCP tools) to interactively browse the running
 
 ```bash
 # Start local server in background
-cd C:\Users\emily\projects\health-tracker && python -m http.server 8080 -d pwa &
+cd "$(git rev-parse --show-toplevel)" && python -m http.server 8080 -d pwa &
 
 # Launch Claude Code with Chrome extension
 claude --chrome

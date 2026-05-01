@@ -144,6 +144,7 @@ echo "[$TODAY] Running Claude Code analysis..."
 CLAUDECODE="" claude -p "Process the health data that has been extracted to $EXTRACT_DIR. Today is $TODAY. The data root is $DATA_DIR. Follow the instructions in $REPO_DIR/processing/process-day-prompt.md. There may be data from multiple days - process each day found." \
     --model sonnet \
     --dangerously-skip-permissions \
+    --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" \
     >> "$DATA_DIR/logs/$TODAY.log" 2>&1 || echo "[$TODAY] WARNING: Claude Code exited with an error. Check log: $DATA_DIR/logs/$TODAY.log"
 
 echo "[$TODAY] Claude Code analysis complete."
@@ -210,6 +211,7 @@ if [ "$RUN_PHASE2" = "1" ]; then
         CLAUDECODE="" claude -p "Generate the meal plan and workout regimen for $TODAY. The data root is $DATA_DIR. The extracted data is at $EXTRACT_DIR. Follow the instructions in $REPO_DIR/processing/plan-prompt.md." \
             --model sonnet \
             --dangerously-skip-permissions \
+            --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" \
             >> "$DATA_DIR/logs/$TODAY.log" 2>&1 \
             && {
                 date +"%Y-%m-%dT%H:%M:%S" > "$DATA_DIR/last-plan-generation.txt"
