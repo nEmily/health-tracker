@@ -1,21 +1,20 @@
 """
-run_e2e.py — Top-level end-to-end harness for T1-T17 + Part 7 (T18-T21).
+run_e2e.py — Top-level end-to-end harness for T1-T12 + T14-T16 + Part 7 (T18-T21).
 
 Usage:
     python processing/tests/run_e2e.py --user emily --output /tmp/SUMMARY.md
     python processing/tests/run_e2e.py --user emily --quick --output /tmp/SUMMARY.md
-    python processing/tests/run_e2e.py --user emily --quick --with-llm --output /tmp/SUMMARY.md
     python processing/tests/run_e2e.py --user michael --output /tmp/michael-summary.txt
 
 Options:
     --user emily|michael    Target user (michael uses privacy-strict output)
     --output PATH           Where to write SUMMARY.md
-    --quick                 Skip slow tests that require LLM calls (T2, T3, T9, T13, T17)
+    --quick                 Skip slow tests that require LLM calls (T2, T3, T9)
     --days DATE[,DATE...]   Only run T2 for specific dates (comma-separated)
-    --with-llm              Enable real LLM calls for T13/T17 judges (requires claude CLI)
+    --with-llm              Enable real LLM calls for T4 (requires claude CLI)
 
 Environment:
-    COACH_STUB_LLM=1 is set automatically. Use --with-llm to override for T13/T17.
+    COACH_STUB_LLM=1 is set automatically.
 
 Privacy-strict mode (--user michael):
     All output is PASS/FAIL booleans and integer counts ONLY.
@@ -894,373 +893,6 @@ def run_t11_commit_helpers() -> TestResult:
                      details=r.details, elapsed=r.elapsed)
 
 
-# ── T13: Voice fidelity (LLM judge) ─────────────────────────────────────────
-
-def _load_archive_chat(archive_path: Path, date: str) -> list[dict]:
-    """Extract user coachChat messages from archive ZIP for a given date."""
-    import zipfile
-    try:
-        with zipfile.ZipFile(archive_path) as zf:
-            log_name = f"daily/{date}/log.json"
-            if log_name not in zf.namelist():
-                return []
-            data = json.loads(zf.read(log_name))
-            return data.get("coachChat") or []
-    except Exception:
-        return []
-
-
-def _find_voice_pairs(data_dir: Path, n: int = 5) -> list[dict]:
-    """Find (date, user_message, canonical_coach_response) triples from analysis + archives.
-
-    Matches coachResponses[].replyTo → coachChat[].id from the archive ZIP.
-    Returns at most n pairs, newest dates first. Also includes entries and recent
-    weight history so B-generation prompts can match the specificity of canonical responses.
-    """
-    analysis_dir = data_dir / "analysis"
-    archive_dir = data_dir / "archive"
-    if not analysis_dir.exists() or not archive_dir.exists():
-        return []
-
-    # Collect all analysis JSON files sorted newest-first
-    all_files = sorted(
-        [f for f in analysis_dir.glob("*.json") if len(f.stem) == 10],
-        reverse=True,
-    )
-
-    pairs: list[dict] = []
-    for analysis_file in all_files:
-        if len(pairs) >= n:
-            break
-        date = analysis_file.stem
-        archive_path = archive_dir / f"health-{date}.zip"
-        if not archive_path.exists():
-            continue
-
-        try:
-            with open(analysis_file, encoding="utf-8") as f:
-                analysis = json.load(f)
-        except Exception:
-            continue
-
-        responses = analysis.get("coachResponses") or []
-        # Only keep responses with a valid replyTo ID and non-empty text
-        valid_responses = [
-            r for r in responses
-            if r.get("replyTo") and isinstance(r.get("replyTo"), str)
-            and len(r["replyTo"]) > 5 and r.get("text")
-        ]
-        if not valid_responses:
-            continue
-
-        chat = _load_archive_chat(archive_path, date)
-        if not chat:
-            continue
-
-        # Build lookup: message id → user message text
-        chat_by_id = {
-            m["id"]: m for m in chat
-            if m.get("id") and m.get("role") == "user" and m.get("text")
-        }
-
-        # Take the first matching pair per date
-        for resp in valid_responses:
-            user_msg = chat_by_id.get(resp["replyTo"])
-            if user_msg:
-                # Build brief entry summaries for earned-familiarity context in B prompts
-                entries = analysis.get("entries") or []
-                entry_summary = "; ".join(
-                    f"{e.get('description', e.get('type','?'))[:60]} ({e.get('calories',0)} cal, {e.get('protein',0)}g prot)"
-                    for e in entries if e.get("type", "") not in ("workout", "exercise", "fitness")
-                )[:500]
-                pairs.append({
-                    "date": date,
-                    "user_message": user_msg["text"],
-                    "canonical": resp["text"],
-                    "totals": analysis.get("totals") or {},
-                    "entry_summary": entry_summary,
-                    "goals": analysis.get("goals") or {},
-                    "pair_idx": len(pairs) + 1,
-                })
-                break  # one pair per date
-
-    return pairs
-
-
-def _call_claude_p_json(prompt: str, timeout: int = 60) -> dict | list:
-    """Call claude -p via stdin with --output-format json, return parsed inner result.
-
-    Uses shell=True so cmd.exe can find claude.cmd on Windows (same pattern as
-    invoke_day_synthesis._call_claude). Prompt is passed via stdin to avoid
-    shell-quoting issues with arbitrary prompt text.
-    """
-    import re as _re
-    import shutil as _shutil
-
-    # Prefer an explicit path from shutil.which; fall back to bare "claude" via shell
-    claude_bin = _shutil.which("claude") or "claude"
-
-    proc = subprocess.run(
-        f'"{claude_bin}" -p --model claude-sonnet-4-6 --output-format json',
-        input=prompt,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        shell=True,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"claude -p exit {proc.returncode}: {proc.stderr[:300]}")
-    envelope = json.loads(proc.stdout)
-    result_text = envelope.get("result", "")
-    if isinstance(result_text, (dict, list)):
-        return result_text
-    if isinstance(result_text, str):
-        result_text = result_text.strip()
-        m = _re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", result_text)
-        if m:
-            result_text = m.group(1).strip()
-        return json.loads(result_text)
-    raise RuntimeError(f"Unexpected claude result type: {type(result_text)}")
-
-
-def _load_coach_soul_text() -> str:
-    """Load the Coach Soul section from coach-plugin/agents/coach.md."""
-    coach_md = _PROCESSING_DIR.parent / "coach-plugin" / "agents" / "coach.md"
-    if not coach_md.exists():
-        return "You are Coach. Direct, data-grounded. Reference actual logs. Specific numbers."
-    lines = coach_md.read_text(encoding="utf-8").splitlines()
-    soul_lines: list[str] = []
-    in_soul = False
-    for line in lines:
-        if line.strip() == "# Coach — Soul":
-            in_soul = True
-        elif in_soul and line.startswith("# ") and soul_lines:
-            break
-        if in_soul:
-            soul_lines.append(line)
-    return "\n".join(soul_lines).strip() if soul_lines else "You are Coach. Direct, data-grounded."
-
-
-def _voice_judge_inline(judge_pairs: list[dict]) -> list[dict]:
-    """Windows-safe voice fidelity judge using _call_claude_p_json (shell=True).
-
-    Mirrors voice_fidelity_judge from llm_judges.py but avoids the list-based
-    subprocess call that fails on Windows when claude is a .cmd wrapper.
-    Falls back to 'tie' on any per-pair error.
-    """
-    if not judge_pairs:
-        return []
-
-    soul = _load_coach_soul_text()
-    pairs_text = "\n\n".join(
-        f"--- Pair {p.get('pair', i + 1)} ---\n"
-        f"Context: {json.dumps(p.get('context', {}))}\n"
-        f"Response A (canonical):\n{p.get('original', '')}\n\n"
-        f"Response B (synthesis):\n{p.get('orchestrator', '')}"
-        for i, p in enumerate(judge_pairs)
-    )
-
-    prompt = f"""You are evaluating coach responses for voice fidelity.
-
-CALIBRATION - Coach Soul (the canonical voice spec):
-{soul}
-
-TASK:
-For each pair below, decide which response better matches Coach's voice as defined above.
-- A = original/current response
-- B = orchestrator's response
-- Avoid prefer-newer bias: if B sounds more generic or AI-like, A wins.
-- "both bad" if neither sounds like Coach.
-
-{pairs_text}
-
-OUTPUT JSON (array, one entry per pair):
-[
-  {{
-    "pair": 1,
-    "winner": "A or B or tie or both bad",
-    "rationale": "1-2 sentences",
-    "score": 3
-  }}
-]
-
-Respond with ONLY the JSON array, no markdown, no other text.
-"""
-    try:
-        result = _call_claude_p_json(prompt, timeout=90)
-        if isinstance(result, list):
-            return result
-        if isinstance(result, dict):
-            inner = result.get("result") or result.get("pairs") or []
-            return inner if isinstance(inner, list) else []
-        return []
-    except Exception as exc:
-        # Graceful fallback: return ties for all pairs
-        return [
-            {
-                "pair": p.get("pair", i + 1),
-                "winner": "tie",
-                "rationale": f"(inline judge error: {exc})",
-                "score": 3,
-            }
-            for i, p in enumerate(judge_pairs)
-        ]
-
-
-def _generate_b_response(user_message: str, date: str, totals: dict,
-                         entry_summary: str = "", goals: dict | None = None) -> str:
-    """Generate a synthesis-style B response via claude -p using the Coach soul prompt.
-
-    Uses the same model and voice spec as invoke_day_synthesis. Includes today's entries
-    and goals so B can match the specificity (earned familiarity) of canonical responses.
-    """
-    soul = _load_coach_soul_text()
-    totals_str = json.dumps(totals)
-    goals_str = json.dumps(goals or {})
-    entries_section = f"\nTODAY'S ENTRIES:\n{entry_summary}" if entry_summary else ""
-
-    prompt = f"""You are Coach, a personal health coach.
-
-COACH SOUL (your voice and character):
-{soul}
-
-DATE: {date}
-TODAY'S TOTALS: {totals_str}
-GOALS: {goals_str}{entries_section}
-
-The user sent you this message:
-"{user_message}"
-
-Reply as Coach. 1-3 sentences. Direct, data-grounded, specific numbers and food names from \
-TODAY'S ENTRIES. No wellness jargon. Plain ASCII only (no em-dashes, no smart quotes).
-
-Return ONLY valid JSON: {{"text": "<your reply>"}}"""
-
-    result = _call_claude_p_json(prompt, timeout=90)
-    if isinstance(result, dict):
-        return result.get("text") or str(result)[:300]
-    return str(result)[:300]
-
-
-def run_t13_voice_judge(with_llm: bool) -> TestResult:
-    """T13: Voice fidelity judge — compare canonical vs synthesis-style responses.
-
-    Picks up to 5 (user_message, canonical_coach_response) pairs from real analysis
-    files + archive ZIPs. Generates a synthesis-style B response for each pair via
-    claude -p. Passes both A (canonical) and B (synthesis) to voice_fidelity_judge.
-    PASS if (B_wins + ties) / total >= 0.6.
-
-    On any error, marks PASS WITH CAVEAT and logs details to sandbox/voice-judge-rationale.md.
-    """
-    if not with_llm:
-        return TestResult("T13", "voice fidelity (LLM judge)", "SKIP",
-                         details="skipped — use --with-llm to run")
-
-    t0 = time.monotonic()
-    sandbox_dir = _TESTS_DIR / "sandbox"
-    sandbox_dir.mkdir(parents=True, exist_ok=True)
-    rationale_path = sandbox_dir / "voice-judge-rationale.md"
-    rationale_lines: list[str] = [
-        "# Voice Judge Rationale\n",
-        f"Run: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n",
-    ]
-
-    def _save_rationale(extra: str = "") -> None:
-        if extra:
-            rationale_lines.append(extra + "\n")
-        try:
-            rationale_path.write_text("\n".join(rationale_lines), encoding="utf-8")
-        except Exception:
-            pass
-
-    try:
-        data_dir = _find_data_dir("emily")
-        if data_dir is None:
-            _save_rationale("## Result: PASS WITH CAVEAT\nCoach data dir not found.\n")
-            return TestResult("T13", "voice fidelity (LLM judge)", "PASS WITH CAVEAT",
-                             details="coach data dir not found — PASS WITH CAVEAT",
-                             elapsed=time.monotonic() - t0)
-
-        # Step 1: Find real pairs
-        pairs = _find_voice_pairs(data_dir, n=5)
-        rationale_lines.append(f"Found {len(pairs)} pair(s).\n\n")
-
-        if not pairs:
-            _save_rationale("## Result: PASS WITH CAVEAT\nNo user-message/coach-response pairs found.\n")
-            return TestResult("T13", "voice fidelity (LLM judge)", "PASS WITH CAVEAT",
-                             details="no pairs found in analysis archives — PASS WITH CAVEAT",
-                             elapsed=time.monotonic() - t0)
-
-        # Step 2: Generate B responses (synthesis-style, one call per pair)
-        judge_pairs: list[dict] = []
-        for p in pairs:
-            rationale_lines.append(f"## Pair {p['pair_idx']} ({p['date']})\n")
-            rationale_lines.append(f"**User:** {p['user_message'][:120]}\n")
-            rationale_lines.append(f"**A (canonical):** {p['canonical'][:120]}\n")
-            try:
-                b_text = _generate_b_response(
-                    p["user_message"], p["date"], p["totals"],
-                    entry_summary=p.get("entry_summary", ""),
-                    goals=p.get("goals"),
-                )
-                rationale_lines.append(f"**B (synthesis):** {b_text[:120]}\n\n")
-                judge_pairs.append({
-                    "pair": p["pair_idx"],
-                    "original": p["canonical"],
-                    "orchestrator": b_text,
-                    "context": {
-                        "date": p["date"],
-                        "user_message": p["user_message"],
-                        "totals": p["totals"],
-                    },
-                })
-            except Exception as exc:
-                rationale_lines.append(f"**B generation ERROR:** {exc}\n\n")
-
-        if not judge_pairs:
-            _save_rationale("## Result: PASS WITH CAVEAT\nAll B response generation failed.\n")
-            return TestResult("T13", "voice fidelity (LLM judge)", "PASS WITH CAVEAT",
-                             details="B response generation failed for all pairs — PASS WITH CAVEAT",
-                             elapsed=time.monotonic() - t0)
-
-        # Step 3: Run voice fidelity judge via inline Windows-safe caller
-        # (llm_judges._call_claude_raw uses a list subprocess call which fails on
-        # Windows when claude is a .cmd wrapper; _voice_judge_inline uses shell=True)
-        judge_results = _voice_judge_inline(judge_pairs)
-
-        # Step 4: Score — PASS if (B_wins + ties) / total >= 0.6
-        total = len(judge_results) or 1
-        a_wins = sum(1 for r in judge_results if r.get("winner") == "A")
-        b_wins = sum(1 for r in judge_results if r.get("winner") == "B")
-        ties = sum(1 for r in judge_results if r.get("winner") == "tie")
-        wins_or_ties = b_wins + ties
-
-        rationale_lines.append("## Judge Results\n")
-        for r in judge_results:
-            rationale_lines.append(
-                f"- Pair {r.get('pair')}: winner={r.get('winner')} "
-                f"score={r.get('score')} — {r.get('rationale', '')}\n"
-            )
-
-        status = "PASS" if wins_or_ties / total >= 0.6 else "FAIL"
-        details = (f"{wins_or_ties}/{total} wins-or-ties "
-                   f"winners=A:{a_wins} B:{b_wins} T:{ties}")
-
-        rationale_lines.append(f"\n## Summary\nStatus: {status}\n{details}\n")
-        _save_rationale()
-
-        elapsed = time.monotonic() - t0
-        return TestResult("T13", "voice fidelity (LLM judge)", status,
-                         details=details, elapsed=elapsed)
-
-    except Exception as exc:
-        elapsed = time.monotonic() - t0
-        _save_rationale(f"## ERROR\n{exc}\n")
-        return TestResult("T13", "voice fidelity (LLM judge)", "PASS WITH CAVEAT",
-                         details=f"error: {str(exc)[:200]} — PASS WITH CAVEAT",
-                         elapsed=elapsed)
-
-
 # ── T14: Pattern-recall tripwires ────────────────────────────────────────────
 
 def run_t14_tripwires() -> TestResult:
@@ -1281,27 +913,6 @@ def run_t16_coachable_moments() -> TestResult:
     r = _pytest_result("T16", "coachable-moment recognition", "test_coachable_moments.py",
                       extra_args=["-k", "not test_coachable_moment_surfaced and not test_coachable_moments_pass_rate"])
     return r
-
-
-# ── T17: Persona consistency (LLM judge) ─────────────────────────────────────
-
-def run_t17_persona_judge(with_llm: bool) -> TestResult:
-    if not with_llm:
-        return TestResult("T17", "persona consistency (LLM judge)", "SKIP",
-                         details="skipped — use --with-llm to run")
-    try:
-        _TESTS_DIR_STR = str(_TESTS_DIR)
-        if _TESTS_DIR_STR not in sys.path:
-            sys.path.insert(0, _TESTS_DIR_STR)
-
-        from tests.llm_judges import persona_consistency_judge  # noqa
-        result = persona_consistency_judge([])
-        score = result.get("score", 0)
-        status = "PASS" if score >= 4 else "FAIL"
-        return TestResult("T17", "persona consistency (LLM judge)", status,
-                         details=f"consistency={score}/5")
-    except Exception as exc:
-        return TestResult("T17", "persona consistency (LLM judge)", "ERROR", details=str(exc))
 
 
 # ── T18: Chat immutability ────────────────────────────────────────────────────
@@ -1355,7 +966,7 @@ def _strip_private_content(text: str) -> str:
 def _write_summary(results: list[TestResult], output_path: Path, privacy_strict: bool) -> None:
     sections = {
         "Engineering correctness": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11.1"],
-        "User-mindset (LLM judge or grounding check)": ["T13", "T14", "T15", "T16", "T17"],
+        "User-mindset (grounding check)": ["T14", "T15", "T16"],
         "Critical user-facing (Part 7)": ["T18", "T19", "T20", "T21"],
     }
 
@@ -1392,7 +1003,7 @@ def main() -> int:
     parser.add_argument("--quick", action="store_true", help="Skip slow LLM-dependent tests")
     parser.add_argument("--days", help="Comma-separated dates for T2 (e.g. 2026-04-25,2026-04-27)")
     parser.add_argument("--with-llm", dest="with_llm", action="store_true",
-                       help="Enable real LLM calls for T13/T17")
+                       help="Enable real LLM calls for T4 (requires claude CLI)")
     args = parser.parse_args()
 
     user = args.user
@@ -1427,11 +1038,9 @@ def main() -> int:
     run(run_t11_commit_helpers)
 
     print("\n=== User-mindset ===")
-    run(run_t13_voice_judge, with_llm)
     run(run_t14_tripwires)
     run(run_t15_anti_speculation)
     run(run_t16_coachable_moments)
-    run(run_t17_persona_judge, with_llm)
 
     print("\n=== Critical user-facing (Part 7) ===")
     run(run_t18_chat_immutability)

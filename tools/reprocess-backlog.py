@@ -21,7 +21,8 @@ from pathlib import Path
 
 # Entry types where LLM analysis adds nothing (zero calories by definition).
 # When ONLY these are missing, we append directly without re-running synthesis.
-ZERO_CAL_TYPES = {"bodyPhoto", "weight", "bm", "supplement"}
+# NOTE: supplement excluded — some supplements (creatine, fiber) have meaningful nutrition.
+ZERO_CAL_TYPES = {"bodyPhoto", "weight", "bm"}
 
 # Local import so we share the staleness logic
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -101,7 +102,6 @@ def main():
                 "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0,
                 "solubleFiber": 0.0, "insolubleFiber": 0.0,
                 "confidence": "high", "breakdown": [],
-                "_mergedDirect": True,
             })
         a["entries"] = (a.get("entries") or []) + appended
         a["entries"].sort(key=lambda x: x.get("timestamp", ""))

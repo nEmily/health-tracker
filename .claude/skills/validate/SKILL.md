@@ -12,6 +12,7 @@ for f in pwa/scripts/*.js pwa/sw.js; do node --check "$f" 2>&1; done
 node coach-plugin/generate-sdk.js && git diff --exit-code coach-plugin/coach-sdk.md || echo "FAIL: coach-sdk.md is stale — run node coach-plugin/generate-sdk.js and commit the result"
 diff processing/process-day-prompt.md coach-plugin/scripts/process-day-prompt.md > /dev/null && echo "prompt drift: OK" || echo "FAIL: \`processing/process-day-prompt.md\` and \`coach-plugin/scripts/process-day-prompt.md\` must stay byte-identical. Edit the \`processing/\` version and copy to the coach-plugin path."
 diff -u processing/plan-prompt.md coach-plugin/scripts/plan-prompt.md > /dev/null && echo "plan-prompt drift: OK" || echo "FAIL: processing/plan-prompt.md and coach-plugin/scripts/plan-prompt.md have diverged — sync them"
+bash tools/sync-plugin-scripts.sh --check && echo "plugin script drift: OK" || echo "FAIL: coach-plugin/scripts/ has drifted from processing/ wrappers — run bash tools/sync-plugin-scripts.sh to fix"
 for f in processing/process-day.bat processing/process-day.sh coach-plugin/scripts/process-day.bat coach-plugin/scripts/process-day.sh; do claude_calls=$(grep -c 'claude -p' "$f"); model_flags=$(grep -c -- '--model' "$f"); [ "$claude_calls" = "$model_flags" ] || echo "FAIL: $f has $claude_calls claude -p call(s) but $model_flags --model flag(s) — missing pin risks silent Opus upgrade"; done; echo "model pin check done"
 
 # Phase 2: Playwright tests (server starts automatically, no manual setup)

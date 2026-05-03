@@ -16,6 +16,29 @@ from lib.parse_claude_json import parse_claude_json
 _REQUIRED_FIELDS = ("description", "calories", "protein", "carbs", "fat", "fiber")
 _DEFAULT_MODEL = "haiku"
 
+# Types where LLM analysis adds nothing — zero calories by definition.
+# NOTE: supplement is intentionally excluded — some supplements (creatine, fiber)
+# have meaningful nutrition that Haiku can extract.
+ZERO_CAL_TYPES = {"bodyPhoto", "weight", "bm"}
+
+
+def _build_zero_cal_entry(entry: dict) -> dict:
+    """Return a zero-macro analysis result without calling the LLM."""
+    et = entry.get("type", "")
+    default_desc = {
+        "bodyPhoto": f"Body photo ({entry.get('subtype', 'body')})",
+        "weight": f"Body weight: {entry.get('value') or entry.get('notes', '?')}",
+        "bm": "Bowel movement",
+    }.get(et, "Entry")
+    return {
+        **entry,
+        "description": entry.get("description") or default_desc,
+        "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0,
+        "solubleFiber": 0.0, "insolubleFiber": 0.0,
+        "confidence": "high", "breakdown": [],
+        "_reanalyzedAt": _now_ms(),
+    }
+
 
 def analyze(
     entry: dict,
@@ -35,6 +58,9 @@ def analyze(
         Analyzed entry dict with calories, protein, carbs, fat, fiber, description, etc.
         On failure after retry, returns the original entry with an _analysisError key.
     """
+    if entry.get("type") in ZERO_CAL_TYPES:
+        return _build_zero_cal_entry(entry)
+
     prompt = _build_prompt(entry, profile, photo_path)
 
     for attempt in range(2):
