@@ -7,9 +7,9 @@ const UI = {
   _dayBoundaryHours: 4,
 
   // --- Date Helpers ---
+  // Alias for Time.todayCoachDate(). Kept for backward compatibility.
   today() {
-    const d = new Date(Date.now() - UI._dayBoundaryHours * 3600000);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return Time.todayCoachDate();
   },
 
   formatDate(dateStr) {
@@ -17,8 +17,10 @@ const UI = {
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   },
 
-  formatTime(isoStr) {
-    const d = new Date(isoStr);
+  formatTime(val) {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   },
 
@@ -312,7 +314,7 @@ const UI = {
     // Pending upload badge — shown when entry was saved after last successful upload for that date.
     // Falls back to analysis.importedAt: if the entry has been analyzed, it was already uploaded,
     // so don't show the badge even if localStorage was cleared (common on iOS/Safari).
-    const entryTs = new Date(entry.timestamp).getTime();
+    const entryTs = new Date(entry.timestamp || entry.createdAt || 0).getTime();
     const lastSync = (typeof CloudRelay !== 'undefined') ? CloudRelay.getLastSyncTime(entry.date) : 0;
     // Use dayImportedAt as fallback — covers entry types that processing skips (bodyPhoto, weight)
     const analyzedAt = dayImportedAt || (analysisEntry ? (analysisEntry._importedAt || 0) : 0);
@@ -342,7 +344,7 @@ const UI = {
     }
 
     const time = UI.createElement('div', 'entry-time');
-    time.textContent = UI.formatTime(entry.timestamp);
+    time.textContent = UI.formatTime(entry.timestamp || entry.createdAt);
     body.appendChild(time);
 
     div.appendChild(icon);

@@ -10,15 +10,17 @@ REM IMPORTANT: Re-processes dates when the relay has new pending data (relay = n
 setlocal enabledelayedexpansion
 
 REM Data dir: auto-detect based on script location
+REM If deployed to <data>\processing\ (normal users), parent has profile\
+REM If in repo at <repo>\processing\ (dev), parent\coach has profile\
 set SCRIPT_PARENT=%~dp0..
 if exist "%SCRIPT_PARENT%\profile" (
     set DATA_DIR=%SCRIPT_PARENT%
     set REPO_DIR=%SCRIPT_PARENT%
-) else if exist "%SCRIPT_PARENT%\..\coach\profile" (
-    set DATA_DIR=%SCRIPT_PARENT%\..\coach
-    set REPO_DIR=%SCRIPT_PARENT%\..
+) else if exist "%SCRIPT_PARENT%\coach\profile" (
+    set DATA_DIR=%SCRIPT_PARENT%\coach
+    set REPO_DIR=%SCRIPT_PARENT%
 ) else (
-    echo [ERROR] Cannot find coach data directory.
+    echo [ERROR] Cannot find coach data directory. Expected profile\ at %SCRIPT_PARENT% or %SCRIPT_PARENT%\coach
     exit /b 1
 )
 if defined HEALTH_BACKUP_DIR (set BACKUP_DIR=%HEALTH_BACKUP_DIR%) else (set BACKUP_DIR=%USERPROFILE%\health-data-backup)
@@ -59,13 +61,15 @@ REM --- Detect first run of today (checked before Phase 1) ---
 set PHASE2_FIRST_RUN=0
 if not exist "%DATA_DIR%\analysis\%TODAY%.json" set PHASE2_FIRST_RUN=1
 
-REM PHASE2_FIRST_RUN is re-checked after relay downloads (relay may delete today's analysis)
+REM PHASE2_FIRST_RUN is set true only when no analysis file exists at all for today
 set ZIP_COUNT=0
 set NEW_DATES=
 
 REM --- Sync config: ALWAYS load from sync-config.json in DATA_DIR.
 REM     Ignore any inherited env vars -- they cause cross-user contamination
-REM     when multiple coach folders share a machine.
+REM     when multiple coach folders share a machine. Watcher.ps1 sets these
+REM     env vars per-run; if running directly without watcher, this overwrites
+REM     whatever was inherited so we use the right keys for this DATA_DIR.
 set HEALTH_SYNC_URL=
 set HEALTH_SYNC_KEY=
 if not exist "%DATA_DIR%\sync-config.json" (
@@ -94,6 +98,10 @@ for /f "usebackq delims=" %%j in (`curl -s "%HEALTH_SYNC_URL%/sync/%HEALTH_SYNC_
 REM Parse pending dates using PowerShell
 for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "try { ($env:PENDING_JSON | ConvertFrom-Json).pending -join ',' } catch { '' }"`) do set RELAY_DATES=%%d
 
+REM Save gen map to temp file for use during upload (race condition detection)
+set GEN_MAP_FILE=%TEMP%\health-tracker-gen-%RANDOM%.json
+powershell -NoProfile -Command "try { $g = ($env:PENDING_JSON | ConvertFrom-Json).gen; if ($g) { $g | ConvertTo-Json } else { '{}' } } catch { '{}' }" > "%GEN_MAP_FILE%" 2>nul
+
 if not "!RELAY_DATES!"=="" (
     echo [%TODAY%] Cloud relay has pending dates: !RELAY_DATES!
 
@@ -113,6 +121,11 @@ if not "!RELAY_DATES!"=="" (
             if exist "%DATA_DIR%\analysis\%%d.json.uploaded" (
                 del "%DATA_DIR%\analysis\%%d.json.uploaded" >nul 2>&1
             )
+            REM Write a reconcile marker: signals that fresh relay data was downloaded for this date.
+            REM Phase 1 prompt uses this to force full entry-ID comparison (catches date-moves and
+            REM race conditions where a concurrent pass wrote a stale analysis before this download).
+            REM Marker is deleted after Phase 1 completes (see cleanup below).
+            echo %TODAY% > "%DATA_DIR%\analysis\%%d.json.reconcile"
             REM If the existing analysis JSON is corrupt, delete it so Claude does a full re-process.
             if exist "%DATA_DIR%\analysis\%%d.json" (
                 powershell -NoProfile -Command "try { ConvertFrom-Json (Get-Content -Raw '%DATA_DIR%\analysis\%%d.json') | Out-Null; exit 0 } catch { exit 1 }"
@@ -138,7 +151,7 @@ if not "!RELAY_DATES!"=="" (
     echo [%TODAY%] No pending data on cloud relay.
 )
 
-REM Re-check PHASE2_FIRST_RUN — relay may have deleted today's analysis
+REM Re-check PHASE2_FIRST_RUN in case today's analysis was absent before downloads
 if not exist "%DATA_DIR%\analysis\%TODAY%.json" set PHASE2_FIRST_RUN=1
 
 :check_local
@@ -163,16 +176,48 @@ if !ZIP_COUNT! equ 0 (
 
 echo [%TODAY%] Processing !ZIP_COUNT! new days of data...
 
-REM --- Run Claude Code to process extracted data ---
-echo [%TODAY%] Running Claude Code analysis...
-call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found." --model sonnet --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+REM --- Build reconcile-dates list to pass to Phase 1 ---
+set RECONCILE_DATES=
+for %%f in ("%DATA_DIR%\analysis\????-??-??.json.reconcile") do (
+    set "RDATE=%%~nf"
+    set "RDATE=!RDATE:.json=!"
+    set RECONCILE_DATES=!RECONCILE_DATES! !RDATE!
+)
+if not "!RECONCILE_DATES!"=="" (
+    echo [%TODAY%] Reconcile markers found for:!RECONCILE_DATES! >>"%DATA_DIR%\logs\%TODAY%.log"
+)
 
-echo MARKER:claude-done >>"%DATA_DIR%\logs\%TODAY%.log"
-if errorlevel 1 (
-    echo [%TODAY%] WARNING: Claude Code exited with an error. >>"%DATA_DIR%\logs\%TODAY%.log"
+REM --- Phase 1: orchestrator (default) or monolith fallback ---
+REM Set PROCESS_DAY_USE_ORCHESTRATOR=0 to revert to the legacy monolith path.
+if "%PROCESS_DAY_USE_ORCHESTRATOR%"=="" set PROCESS_DAY_USE_ORCHESTRATOR=1
+
+if "%PROCESS_DAY_USE_ORCHESTRATOR%"=="1" (
+    echo [%TODAY%] Running orchestrator process_day.py...
+    REM Iterate NEW_DATES (space-separated). Process each date through the Python orchestrator.
+    for %%D in (!NEW_DATES!) do (
+        echo [%TODAY%] Orchestrator: processing %%D >>"%DATA_DIR%\logs\%TODAY%.log"
+        python "%REPO_DIR%\processing\process_day.py" --date %%D --data-dir "%DATA_DIR%" --extract-dir "%EXTRACT_DIR%" --backup-dir "%BACKUP_DIR%" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+        if errorlevel 1 echo [%TODAY%] WARNING: orchestrator failed for %%D >>"%DATA_DIR%\logs\%TODAY%.log"
+    )
+    echo MARKER:orchestrator-done >>"%DATA_DIR%\logs\%TODAY%.log"
+) else (
+    echo [%TODAY%] Running legacy monolith Claude Code analysis rollback mode...
+    call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found. RECONCILE_DATES (fresh relay download this pass, run mandatory entry reconciliation for these dates even if analysis already exists):!RECONCILE_DATES!" --model sonnet --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+    echo MARKER:claude-done >>"%DATA_DIR%\logs\%TODAY%.log"
+    if errorlevel 1 (
+        echo [%TODAY%] WARNING: Claude Code exited with an error. >>"%DATA_DIR%\logs\%TODAY%.log"
+    )
+)
+
+REM --- Delete reconcile markers now that Phase 1 has run ---
+for %%f in ("%DATA_DIR%\analysis\????-??-??.json.reconcile") do (
+    del "%%f" >nul 2>&1
 )
 
 echo MARKER:pre-backup >>"%DATA_DIR%\logs\%TODAY%.log"
+
+REM --- Rebuild weekly summary so coach always has fresh numbers ---
+node "%REPO_DIR%\coach-plugin\build-summary.js" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
 
 REM --- Backup analysis and corrections locally ---
 echo [%TODAY%] Backing up analysis and corrections... >>"%DATA_DIR%\logs\%TODAY%.log"
@@ -238,7 +283,7 @@ if not exist "%DATA_DIR%\analysis\%TODAY%.json" (
 
 REM --- Run Phase 2: Plan Generation ---
 echo [%TODAY%] Running Phase 2: plan generation... >>"%DATA_DIR%\logs\%TODAY%.log"
-call claude -p "Generate the meal plan and workout regimen for %TODAY%. The data root is %DATA_DIR%. The extracted data is at %EXTRACT_DIR%. Follow the instructions in %REPO_DIR%\processing\plan-prompt.md." --model sonnet --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+call claude -p "Generate the meal plan and workout regimen for %TODAY%. The data root is %DATA_DIR%. The extracted data is at %EXTRACT_DIR%. Follow the instructions in %REPO_DIR%\processing\plan-prompt.md." --model haiku --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
 set PHASE2_EXIT=!ERRORLEVEL!
 echo MARKER:phase2-done >>"%DATA_DIR%\logs\%TODAY%.log"
 if !PHASE2_EXIT! neq 0 (
@@ -279,7 +324,12 @@ for %%f in ("%DATA_DIR%\analysis\????-??-??.json") do (
     )
     if "!NEED_UPLOAD!"=="1" (
         echo [%TODAY%] Uploading analysis for !ADATE!... >>"%DATA_DIR%\logs\%TODAY%.log"
-        curl -sf -X POST -H "Content-Type: application/json; charset=utf-8" --data-binary @"%%f" "%HEALTH_SYNC_URL%/sync/%HEALTH_SYNC_KEY%/day/!ADATE!/done" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+        REM Look up gen for this date from the map we captured at /pending time
+        set "GEN_PARAM="
+        if exist "%GEN_MAP_FILE%" (
+            for /f "usebackq delims=" %%g in (`powershell -NoProfile -Command "try { $m = Get-Content '%GEN_MAP_FILE%' -Raw | ConvertFrom-Json; $v = $m.'!ADATE!'; if ($null -ne $v) { '?gen=' + $v } else { '' } } catch { '' }"`) do set "GEN_PARAM=%%g"
+        )
+        curl -sf -X POST -H "Content-Type: application/json; charset=utf-8" --data-binary @"%%f" "%HEALTH_SYNC_URL%/sync/%HEALTH_SYNC_KEY%/day/!ADATE!/done!GEN_PARAM!" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
         if not errorlevel 1 (
             echo [%TODAY%] Uploaded results for !ADATE! >>"%DATA_DIR%\logs\%TODAY%.log"
             echo %TODAY% %TIME% > "%%f.uploaded"
@@ -301,6 +351,9 @@ if !UPLOAD_FAIL! gtr 0 (
 :upload_done
 REM Clean up old upload markers (>30 days)
 forfiles /p "%DATA_DIR%\analysis" /m "*.uploaded" /d -30 /c "cmd /c del @path" 2>nul
+
+REM Clean up gen map temp file
+if exist "%GEN_MAP_FILE%" del "%GEN_MAP_FILE%" 2>nul
 
 REM --- Clean up extracted data ---
 rmdir /s /q "%EXTRACT_DIR%" 2>nul

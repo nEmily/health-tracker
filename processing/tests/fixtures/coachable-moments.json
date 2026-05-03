@@ -1,0 +1,91 @@
+[
+  {
+    "scenario_id": "five_day_under_target_streak",
+    "description": "5 consecutive days under calorie target — coach should surface the streak.",
+    "today_data": {
+      "date": "2026-05-10",
+      "entries": [
+        {"id": "e1", "type": "food", "name": "Chicken + rice", "calories": 580, "protein": 48, "fat": 8, "fiber": 3},
+        {"id": "e2", "type": "food", "name": "Protein shake", "calories": 200, "protein": 30, "fat": 3, "fiber": 1}
+      ],
+      "totals": {"calories": 780, "protein": 78, "fat": 11, "fiber": 4},
+      "goals": {"calories": {"daily": 1200}, "protein": {"daily": 100}}
+    },
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 950, "protein": 82, "under_target": true},
+      {"date": "2026-05-08", "calories": 1050, "protein": 88, "under_target": true},
+      {"date": "2026-05-07", "calories": 980, "protein": 76, "under_target": true},
+      {"date": "2026-05-06", "calories": 1100, "protein": 90, "under_target": true}
+    ],
+    "expected_to_surface": ["streak", "5 days", "five days", "consecutive", "consistent", "row", "under target"]
+  },
+  {
+    "scenario_id": "three_missed_workouts",
+    "description": "3 workouts skipped in a row — coach should mention return-to-routine, not just 'rest day'.",
+    "today_data": {
+      "date": "2026-05-10",
+      "entries": [
+        {"id": "e1", "type": "food", "name": "Protein shake", "calories": 200, "protein": 30, "fat": 3, "fiber": 1}
+      ],
+      "totals": {"calories": 200, "protein": 30, "fat": 3, "fiber": 1},
+      "goals": {"calories": {"daily": 1200}},
+      "regimen": {
+        "weekly": [
+          {"day": "Monday", "workout": "Upper body"},
+          {"day": "Wednesday", "workout": "Lower body"},
+          {"day": "Friday", "workout": "Full body"}
+        ]
+      }
+    },
+    "recent_history": [
+      {"date": "2026-05-09", "workout_logged": false, "scheduled": "Lower body"},
+      {"date": "2026-05-08", "workout_logged": false, "scheduled": "Upper body"},
+      {"date": "2026-05-07", "workout_logged": false, "scheduled": "Full body"}
+    ],
+    "expected_to_surface": ["3 workouts", "three workouts", "missed", "back on track", "return", "routine", "skipped"]
+  },
+  {
+    "scenario_id": "first_protein_floor_hit_in_week",
+    "description": "Hit protein floor for first time in 7 days — coach should call it out as a highlight.",
+    "today_data": {
+      "date": "2026-05-10",
+      "entries": [
+        {"id": "e1", "type": "food", "name": "Salmon + edamame", "calories": 520, "protein": 58, "fat": 18, "fiber": 6},
+        {"id": "e2", "type": "food", "name": "Greek yogurt (lactose-free)", "calories": 180, "protein": 20, "fat": 4, "fiber": 0}
+      ],
+      "totals": {"calories": 700, "protein": 78, "fat": 22, "fiber": 6},
+      "goals": {"protein": {"daily": 80, "floor": 75}}
+    },
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1050, "protein": 62, "under_protein": true},
+      {"date": "2026-05-08", "calories": 980, "protein": 55, "under_protein": true},
+      {"date": "2026-05-07", "calories": 1100, "protein": 60, "under_protein": true},
+      {"date": "2026-05-06", "calories": 1050, "protein": 58, "under_protein": true},
+      {"date": "2026-05-05", "calories": 1150, "protein": 65, "under_protein": true},
+      {"date": "2026-05-04", "calories": 1000, "protein": 70, "under_protein": true},
+      {"date": "2026-05-03", "calories": 1200, "protein": 72, "under_protein": true}
+    ],
+    "expected_to_surface": ["protein", "first time", "hit", "floor", "week", "7 days", "finally", "milestone"]
+  },
+  {
+    "scenario_id": "dinner_over_forward_looking",
+    "description": "Dinner went 200 cal over planned meal — coach should suggest forward-looking trim, not scold.",
+    "today_data": {
+      "date": "2026-05-10",
+      "entries": [
+        {"id": "e1", "type": "food", "name": "Breakfast protein bar", "calories": 220, "protein": 20, "fat": 9, "fiber": 3},
+        {"id": "e2", "type": "food", "name": "Lunch salad", "calories": 380, "protein": 30, "fat": 12, "fiber": 7},
+        {"id": "e3", "type": "food", "name": "Pasta with beef (dinner)", "calories": 750, "protein": 42, "fat": 22, "fiber": 5,
+          "planned_calories": 550, "notes": "went over — bigger portion than planned"}
+      ],
+      "totals": {"calories": 1350, "protein": 92, "fat": 43, "fiber": 15},
+      "goals": {"calories": {"daily": 1200}},
+      "meal_plan": {"dinner": {"planned_calories": 550}}
+    },
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1100, "protein": 88},
+      {"date": "2026-05-08", "calories": 1150, "protein": 82}
+    ],
+    "expected_to_surface": ["tomorrow", "next meal", "trim", "offset", "balance", "forward", "adjust"]
+  }
+]

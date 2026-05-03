@@ -88,15 +88,68 @@ After ZIP extraction, the data is at `{EXTRACT_DIR}/`:
 
 The `{EXTRACT_DIR}` path will be provided in the processing prompt. ZIP extraction may nest paths (e.g. `{EXTRACT_DIR}/daily/{DATE}/daily/{DATE}/log.json`). Use Glob to find the actual `log.json` location.
 
-Profile files (check BOTH locations — ZIP-bundled profile takes priority over fixed-path):
-- `{EXTRACT_DIR}/profile/goals.json` — goals bundled from the PWA (most up-to-date, **use this first**)
-- `{EXTRACT_DIR}/profile/pwa-profile.json` — full PWA profile including supplements, skincare, preferences
-- `{DATA_DIR}/profile/goals.json` — fallback goals on the processing machine
-- `{DATA_DIR}/profile/regimen.json` — workout plans (moderate + hardcore schedules)
-- `{DATA_DIR}/profile/preferences.json` — dietary preferences
+## Profile Architecture (CRITICAL — read carefully)
+
+**The phone is a READ-ONLY CACHE for goals.** As of 2026-05-02 the PWA no longer
+authors `profile/goals.json` in upload ZIPs. The sole writer for goals is the
+/coach skill editing `{DATA_DIR}/profile/goals.json` on the processing machine.
+The cron echoes the canonical shape back to the phone via `pwaProfile.goals` on
+every analysis sync; the phone overwrites its IndexedDB cache from that echo.
+
+This means:
+- `{EXTRACT_DIR}/profile/goals.json` does NOT exist anymore in normal uploads.
+  If you find one, it's an old client — ignore it, do NOT merge it. Never let
+  it override `{DATA_DIR}/profile/goals.json`.
+- `{EXTRACT_DIR}/profile/pwa-profile.json` no longer contains a `goals` field.
+  If you find one with `goals`, ignore that field. The other fields (supplements,
+  bodyPhotoTypes, moreOptions, preferences) ARE phone-driven — echo them through.
+
+**Profile files to read (in priority order):**
+- `{DATA_DIR}/profile/goals.json` — **CANONICAL goals.** Always read first. This is the only source of truth.
+- `{DATA_DIR}/profile/preferences.json` — **CANONICAL preferences.** Includes mealPlan, dietary, dailyStaples, coachingTone, tunaFlavoringRules. Always read.
+- `{DATA_DIR}/profile/regimen.json` — workout plans + supplement protocol. Always read.
 - `{DATA_DIR}/profile/identity.md` — immutable identity facts, dislikes, equipment, genetic patterns (optional)
 - `{DATA_DIR}/profile/current-stats.json` — **source of truth for current weight, trends, adherence** (computed by build-summary.js every cycle)
-- DEPRECATED (ignore if present): `bio.txt`, `measurements.json`
+- `{EXTRACT_DIR}/profile/pwa-profile.json` — phone-only state (supplements with `pending: true` flags, custom entry types, body photo types, moreOptions, preferences-extras). Read this for the supplement-photo processing path and to populate phone-only sections of the pwaProfile echo. **Never read `goals` from this file.**
+- `{EXTRACT_DIR}/profile/goal-updates.json` — **delta queue from the Settings UI.** See "Goal-update reconciliation" below.
+- DEPRECATED (ignore if present): `{EXTRACT_DIR}/profile/goals.json`, `bio.txt`, `measurements.json`
+
+### Goal-update reconciliation (REQUIRED when `goal-updates.json` exists)
+
+When `{EXTRACT_DIR}/profile/goal-updates.json` exists, the user changed goals via
+the phone's Settings UI. The file looks like:
+
+```json
+{
+  "updates": [
+    { "timestamp": 1234567890, "source": "phone-settings", "delta": { "calories": 950, "protein": 90 } },
+    { "timestamp": 1234567999, "source": "phone-settings", "delta": { "water_oz": 110 } }
+  ]
+}
+```
+
+Process every entry in chronological order:
+1. Read current `{DATA_DIR}/profile/goals.json`.
+2. For each update, apply the `delta` fields onto goals.json. The phone uses narrow-shape keys (`calories`, `protein`, `fiber`, `water_oz`, `hardcore.*`). Map them to the canonical rich shape:
+   - `delta.calories` → `goals.calories.daily` (also keep `goals.calories: <number>` for backward compat reads).
+   - `delta.protein` → `goals.macros.protein.target` (preserve floor/ceiling unless the user explicitly changed those).
+   - `delta.fiber` → `goals.fiber.daily_g`.
+   - `delta.water_oz` → `goals.water.daily_oz`.
+   - `delta.hardcore.*` → only update if the recomp/hardcore mode is still active. If hardcore was retired (current goals have no `hardcore` block or `bodyComposition.phase === "recomp"`), record the user's hardcore preference in a `notes` field and skip overwriting.
+3. Add a timeline event to `{DATA_DIR}/profile/timeline.json` for each non-trivial change (`level: "minor"`, `type: "goal-change"`, `source: "phone-settings"`).
+4. Write the merged goals.json back.
+5. The relay file is consumed — don't write back to the phone.
+
+**Echoing pwaProfile.goals:** After processing, build `pwaProfile.goals` for the
+output analysis from the canonical `{DATA_DIR}/profile/goals.json`. Output BOTH
+the legacy narrow keys (`calories`, `protein`, `water_oz`, `fiber`) AND the rich
+keys (`protein_floor`, `protein_ceiling`, `fat_floor`, `water_floor_oz`,
+`fiber_floor_g`, `fiber_ceiling_g`, `fiber_trackSplit`, `weight.floor`,
+`bodyComposition`, `transit`). The narrow keys keep older PWA UI components working;
+the rich keys feed newer UI surfaces. Phone-only sections (`supplements`,
+`bodyPhotoTypes`, `moreOptions`, `preferences`) come from the phone-uploaded
+`pwa-profile.json`, with `{DATA_DIR}/profile/preferences.json` overlaid on top
+(preferences from disk wins on key conflicts).
 
 ## Supplement Photo Processing (NOT subject to No Re-Processing Rule)
 
@@ -177,6 +230,7 @@ If you find 16 date folders but only 14 have analysis files, you MUST process th
    - **Use WebSearch to look up actual calorie/nutrition data** for identified foods. Search for specific items (e.g. "pork belly bao calories", "salmon sashimi nutrition per oz"). Use real data from USDA, restaurant nutrition pages, or reliable nutrition databases - don't guess from memory.
    - If a photo shows a label or menu item, search for that specific product/restaurant item's published nutrition facts.
    - Calculate calories, protein, carbs, fat, and fiber based on looked-up data and estimated portions
+   - **Fiber split (REQUIRED when `goals.fiber.trackSplit` is true):** For every entry with non-zero fiber, estimate `solubleFiber` and `insolubleFiber` (grams) such that `solubleFiber + insolubleFiber == fiber` (round to 1 decimal, then adjust the larger value so they sum exactly). Use these reference splits: psyllium husk 70/30 sol/insol, chia seeds 15/85, oats 50/50, edamame inner beans 35/65, edamame pods 10/90, artichoke hearts 40/60, broccoli 30/70, leafy greens 20/80, fruit (whole) 30/70, vegetable skins 15/85. For mixed-ingredient meals, split per ingredient and sum. If unknown, default 25/75 sol/insol. Confidence on the split can be lower than confidence on total fiber — that's fine.
    - **Always round up / over-estimate** when uncertain - better to over-count than under-count. If a portion could be 300-400 cal, call it 400. If size is ambiguous, assume the larger portion.
    - **Never assume shared meals.** Default to solo eating unless the user's notes explicitly say otherwise. Don't halve portions because a photo shows a serving platter or tongs.
    - **Only count food on the user's plate.** Items visible in the background (e.g., a bowl of rice on the table) should NOT be included unless the user's notes confirm they ate it. Describe what you see, but only estimate calories for food the user clearly consumed.
@@ -266,17 +320,19 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
       "carbs": 0,
       "fat": 0,
       "fiber": 0,
+      "solubleFiber": 0,
+      "insolubleFiber": 0,
       "confidence": "high|medium|low",
       "breakdown": { "item_name": { "cal": 0, "p": 0, "c": 0, "f": 0 } }
     }
   ],
-  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0 },
+  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "solubleFiber": 0, "insolubleFiber": 0 },
   "goals": {
     "calories": { "target": 0, "actual": 0, "remaining": 0, "status": "under|over|on_track" },
     "protein": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
     "carbs": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
     "fat": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
-    "fiber": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
+    "fiber": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high", "soluble_actual": 0, "insoluble_actual": 0, "split_note": "Healthy split is roughly 1:3 soluble:insoluble. No hard target on the split — surface it for awareness only." },
     "water": { "target_oz": 0, "actual_oz": 0, "status": "..." }
   },
   "highlights": ["..."],
@@ -314,6 +370,8 @@ Write a **single JSON file** to `{DATA_DIR}/analysis/{DATE}.json` containing the
    - `replyTo` must match the user message's `id` field so the app can pair question and answer.
    - Keep responses concise (2-4 sentences). Reference their actual data when relevant.
    - Tone: supportive coach, not lecturer. Encourage without being preachy.
+   - **Coaching tone rules (MANDATORY).** Read `{DATA_DIR}/profile/preferences.json` → `coachingTone.rules` and obey every rule. Do NOT use filler/dismissive phrases ("don't overthink it", "trust the process", "listen to your body"), bro-science tropes ("carbs are the enemy", "hormones love this", "clean eating"), or scare-quoted nutrient names ("carbs", "fats"). Speak from logged data. If a recommendation can't be tied to her logs, profile, or a specific physiological reason, don't make it. If uncertain, name the uncertainty directly.
+   - **Honor canonical goals.** When responding to a user message that references targets (calories, protein, fiber, water, weight), pull values from `{DATA_DIR}/profile/goals.json` — never from the phone's pwaProfile snapshot. If the user says "850 is not my target," check goals.json before doubling down. The /coach skill edits goals.json in real time; the phone snapshot lags.
    - **CRITICAL: After generating coachResponses, append the full exchange to `{DATA_DIR}/conversations.md`.**
      This file is the persistent chat history that the live coach session reads. Without this step, in-app messages are invisible to the coach.
      Format (append to end of file, under a date header if new day):

@@ -145,7 +145,7 @@ const Challenges = {
     const needsCal = challenge.tasks.some(t => t.autoCheck?.source === 'calories');
     if (needsCal) {
       const goals = await DB.getProfile('goals') || {};
-      calorieTarget = goals.calories || 2000;
+      calorieTarget = Goals.resolve(goals).calories;
     }
 
     for (const task of challenge.tasks) {
@@ -179,8 +179,9 @@ const Challenges = {
         // Check both calories and protein against profile goals
         if (analysis && analysis.totals) {
           const goals = await DB.getProfile('goals') || {};
-          const calTarget = goals.calories || 2000;
-          const proteinTarget = goals.protein || 100;
+          const _rc = Goals.resolve(goals);
+          const calTarget = _rc.calories;
+          const proteinTarget = _rc.protein;
           const calActual = analysis.totals.calories || 0;
           const proteinActual = analysis.totals.protein || 0;
           // Under calorie goal (10% tolerance) AND hit protein target (90% threshold)

@@ -187,13 +187,26 @@ if not "!RECONCILE_DATES!"=="" (
     echo [%TODAY%] Reconcile markers found for:!RECONCILE_DATES! >>"%DATA_DIR%\logs\%TODAY%.log"
 )
 
-REM --- Run Claude Code to process extracted data ---
-echo [%TODAY%] Running Claude Code analysis...
-call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found. RECONCILE_DATES (fresh relay download this pass, run mandatory entry reconciliation for these dates even if analysis already exists):!RECONCILE_DATES!" --model sonnet --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+REM --- Phase 1: orchestrator (default) or monolith fallback ---
+REM Set PROCESS_DAY_USE_ORCHESTRATOR=0 to revert to the legacy monolith path.
+if "%PROCESS_DAY_USE_ORCHESTRATOR%"=="" set PROCESS_DAY_USE_ORCHESTRATOR=1
 
-echo MARKER:claude-done >>"%DATA_DIR%\logs\%TODAY%.log"
-if errorlevel 1 (
-    echo [%TODAY%] WARNING: Claude Code exited with an error. >>"%DATA_DIR%\logs\%TODAY%.log"
+if "%PROCESS_DAY_USE_ORCHESTRATOR%"=="1" (
+    echo [%TODAY%] Running orchestrator process_day.py...
+    REM Iterate NEW_DATES (space-separated). Process each date through the Python orchestrator.
+    for %%D in (!NEW_DATES!) do (
+        echo [%TODAY%] Orchestrator: processing %%D >>"%DATA_DIR%\logs\%TODAY%.log"
+        python "%REPO_DIR%\processing\process_day.py" --date %%D --data-dir "%DATA_DIR%" --extract-dir "%EXTRACT_DIR%" --backup-dir "%BACKUP_DIR%" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+        if errorlevel 1 echo [%TODAY%] WARNING: orchestrator failed for %%D >>"%DATA_DIR%\logs\%TODAY%.log"
+    )
+    echo MARKER:orchestrator-done >>"%DATA_DIR%\logs\%TODAY%.log"
+) else (
+    echo [%TODAY%] Running legacy monolith Claude Code analysis rollback mode...
+    call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found. RECONCILE_DATES (fresh relay download this pass, run mandatory entry reconciliation for these dates even if analysis already exists):!RECONCILE_DATES!" --model sonnet --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+    echo MARKER:claude-done >>"%DATA_DIR%\logs\%TODAY%.log"
+    if errorlevel 1 (
+        echo [%TODAY%] WARNING: Claude Code exited with an error. >>"%DATA_DIR%\logs\%TODAY%.log"
+    )
 )
 
 REM --- Delete reconcile markers now that Phase 1 has run ---

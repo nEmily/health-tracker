@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v220';
+const CACHE_NAME = 'coach-v225-a11y-criticals';
 
 const ASSETS = [
   './',
@@ -10,6 +10,8 @@ const ASSETS = [
   './styles/components.css',
   './scripts/db.js',
   './scripts/ui.js',
+  './scripts/goals-resolver.js',
+  './scripts/time.js',
   './scripts/app.js',
   './scripts/log.js',
   './scripts/camera.js',
@@ -39,7 +41,8 @@ self.addEventListener('activate', (e) => {
       Promise.all(
         keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
       )
-    ).then(() => self.clients.claim())
+    .then(() => self.clients.claim())
+    )
   );
 });
 

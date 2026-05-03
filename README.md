@@ -118,6 +118,20 @@ The plugin includes an auto-generated SDK (`coach-sdk.md`) so Coach understands 
 
 ---
 
+## Releasing
+
+Before merging to `main`, bump the service worker cache name so iOS picks up the update:
+
+```bash
+bash tools/bump-sw-cache.sh
+```
+
+This sets `CACHE_NAME` in `pwa/sw.js` to `health-tracker-<git-rev>`. iOS will download the new service worker on first open after deploy and activate it on the second open — users don't need to clear cache.
+
+Run it idempotently: calling it twice on the same commit produces no diff.
+
+---
+
 ## Contributing
 
 See the [contributor guide](.claude/skills/contribute/SKILL.md) for development setup.

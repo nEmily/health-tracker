@@ -101,7 +101,7 @@ const AdaptiveGoals = {
     // If expectedRate = -0.5 and weeklyChange = -1.0 → losing 0.5 lbs/wk too fast
     const deviation = weeklyChange - expectedRate;
 
-    const currentTarget = goals.calories || 2000;
+    const currentTarget = Goals.resolve(goals).calories;
 
     // Within tolerance: no suggestion
     if (Math.abs(deviation) < AdaptiveGoals.TOLERANCE) return null;
@@ -181,9 +181,10 @@ const GoalsView = {
 
     // Override with current profile goals (analysis may have stale targets)
     if (profileGoals) {
-      if (profileGoals.calories) calGoal = profileGoals.calories;
-      if (profileGoals.protein && macros.protein) macros.protein.goal = profileGoals.protein;
-      if (profileGoals.water_oz) waterGoal = profileGoals.water_oz;
+      const _rp = Goals.resolve(profileGoals);
+      if (profileGoals.calories != null) calGoal = _rp.calories;
+      if (profileGoals.protein != null && macros.protein) macros.protein.goal = _rp.protein;
+      if (profileGoals.water_oz != null) waterGoal = _rp.water_oz;
     }
 
     return { calIntake, calGoal, calBurned, calNet, macros, waterActual, waterGoal };

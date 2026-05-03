@@ -13,15 +13,44 @@ const DayScore = {
     const analysis = preloaded?.analysis ?? await DB.getAnalysis(date);
     const regimen = preloaded?.regimen ?? await DB.getRegimen();
 
-    const hc = goals.hardcore || {};
-    const moderate = { calories: goals.calories || 2000, protein: goals.protein || 100, water_oz: goals.water_oz || 64, fiber: goals.fiber || 25 };
-    const hardcore = { calories: hc.calories || 1500, protein: hc.protein || 130, water_oz: hc.water_oz || 64, fiber: hc.fiber || goals.fiber || 25 };
+    const resolved = Goals.resolve(goals);
+    const hcRaw = goals.hardcore || null;
+    const hcResolved = hcRaw ? Goals.resolve(hcRaw) : null;
+
+    const moderate = {
+      calories: resolved.calories,
+      protein: resolved.proteinTarget,
+      water_oz: resolved.water_oz,
+      fiber: resolved.fiber,
+      proteinFloor: resolved.proteinFloor,
+      proteinCeiling: resolved.proteinCeiling,
+      waterFloor: resolved.waterFloor,
+      trackSplit: resolved.fiberTrackSplit,
+    };
+    // Hardcore mode is retired in recomp-phase profiles. Backward-compat
+    // defaults (1500 cal, 130g protein, 64oz water, fiber matching moderate)
+    // preserve test expectations and the legacy "stretch" display for users
+    // whose goals.json predates the recomp shift.
+    const hardcore = hcResolved
+      ? {
+          calories: hcResolved.calories || 1500,
+          protein: hcResolved.proteinTarget || 130,
+          water_oz: hcResolved.water_oz || 64,
+          fiber: hcResolved.fiber || resolved.fiber,
+          proteinFloor: resolved.proteinFloor,
+          proteinCeiling: resolved.proteinCeiling,
+          waterFloor: resolved.waterFloor,
+          trackSplit: resolved.fiberTrackSplit,
+        }
+      : { calories: 1500, protein: 130, water_oz: 64, fiber: resolved.fiber, proteinFloor: null, proteinCeiling: null, waterFloor: null, trackSplit: false };
 
     // Get actuals — prefer analysis data, fall back to entry counting
     const totals = analysis?.totals || {};
     const calActual = totals.calories || 0;
     const proteinActual = totals.protein || 0;
     const fiberActual = totals.fiber || 0;
+    const fiberSolubleActual = totals.solubleFiber || 0;
+    const fiberInsolubleActual = totals.insolubleFiber || 0;
     const waterActual = summary.water_oz || 0;
     const hasAnalysis = !!analysis;
 

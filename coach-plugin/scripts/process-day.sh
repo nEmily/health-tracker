@@ -16,13 +16,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Data dir: auto-detect based on script location
+# If deployed to <data>/processing/ (normal users), parent has profile/
+# If in repo at <repo>/processing/ (dev), parent/coach has profile/
 PARENT_DIR="$(dirname "$SCRIPT_DIR")"
 if [ -d "$PARENT_DIR/profile" ]; then
     DATA_DIR="$PARENT_DIR"
     REPO_DIR="$PARENT_DIR"
-elif [ -d "$(dirname "$PARENT_DIR")/coach/profile" ]; then
-    DATA_DIR="$(dirname "$PARENT_DIR")/coach"
-    REPO_DIR="$(dirname "$PARENT_DIR")"
+elif [ -d "$PARENT_DIR/coach/profile" ]; then
+    DATA_DIR="$PARENT_DIR/coach"
+    REPO_DIR="$PARENT_DIR"
 else
     echo "[ERROR] Cannot find coach data directory."
     exit 1
@@ -88,6 +90,8 @@ echo "[$TODAY] Checking cloud relay for pending data..."
 # Get list of pending dates
 PENDING_JSON=$(curl -s "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/pending" || echo '{}')
 RELAY_DATES=$(echo "$PENDING_JSON" | jq -r '.pending[]? // empty' 2>/dev/null | tr '\n' ' ' | xargs)
+# Capture gen map for race condition detection on /done
+GEN_JSON=$(echo "$PENDING_JSON" | jq -c '.gen // {}' 2>/dev/null || echo '{}')
 
 if [ -n "$RELAY_DATES" ]; then
     echo "[$TODAY] Cloud relay has pending dates: $RELAY_DATES"
@@ -95,10 +99,12 @@ if [ -n "$RELAY_DATES" ]; then
     for DATE in $RELAY_DATES; do
         if [ -f "$DATA_DIR/analysis/$DATE.json" ]; then
             echo "[$TODAY] $DATE already has analysis - uploading result and marking done"
+            GEN_VAL=$(echo "$GEN_JSON" | jq -r --arg d "$DATE" '.[$d] // empty' 2>/dev/null || echo '')
+            GEN_PARAM=$([ -n "$GEN_VAL" ] && echo "?gen=$GEN_VAL" || echo "")
             curl -s -X POST \
                 -H "Content-Type: application/json; charset=utf-8" \
                 --data-binary "@$DATA_DIR/analysis/$DATE.json" \
-                "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/day/$DATE/done"
+                "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/day/$DATE/done${GEN_PARAM}"
             echo
         else
             echo "[$TODAY] Downloading $DATE from relay..."
@@ -139,15 +145,35 @@ fi
 if [ "$SKIP_PHASE1" = "0" ]; then
 echo "[$TODAY] Processing $ZIP_COUNT new days of data..."
 
-# --- Run Claude Code to process extracted data ---
-echo "[$TODAY] Running Claude Code analysis..."
-CLAUDECODE="" claude -p "Process the health data that has been extracted to $EXTRACT_DIR. Today is $TODAY. The data root is $DATA_DIR. Follow the instructions in $REPO_DIR/processing/process-day-prompt.md. There may be data from multiple days - process each day found." \
-    --model sonnet \
-    --dangerously-skip-permissions \
-    --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" \
-    >> "$DATA_DIR/logs/$TODAY.log" 2>&1 || echo "[$TODAY] WARNING: Claude Code exited with an error. Check log: $DATA_DIR/logs/$TODAY.log"
+# --- Phase 1: orchestrator (default) or monolith fallback (rollback) ---
+# PROCESS_DAY_USE_ORCHESTRATOR=0 reverts to the legacy 449-line-monolith path.
+# Default is the orchestrator. After 7 days of green side-by-side runs the
+# fallback should be deleted entirely (per plan Part 6 deletion table).
+USE_ORCHESTRATOR="${PROCESS_DAY_USE_ORCHESTRATOR:-1}"
 
-echo "[$TODAY] Claude Code analysis complete."
+if [ "$USE_ORCHESTRATOR" = "1" ]; then
+    echo "[$TODAY] Running orchestrator (process_day.py)..."
+    # Process each new date through the orchestrator. NEW_DATES was populated above.
+    for DATE in "${NEW_DATES[@]+"${NEW_DATES[@]}"}"; do
+        echo "[$TODAY] Orchestrator: processing $DATE"
+        python "$REPO_DIR/processing/process_day.py" \
+            --date "$DATE" \
+            --data-dir "$DATA_DIR" \
+            --extract-dir "$EXTRACT_DIR" \
+            --backup-dir "$BACKUP_DIR" \
+            >> "$DATA_DIR/logs/$TODAY.log" 2>&1 \
+            || echo "[$TODAY] WARNING: orchestrator failed for $DATE. Check log: $DATA_DIR/logs/$TODAY.log"
+    done
+    echo "[$TODAY] Orchestrator complete."
+else
+    echo "[$TODAY] Running legacy monolith Claude Code analysis (rollback mode)..."
+    CLAUDECODE="" claude -p "Process the health data that has been extracted to $EXTRACT_DIR. Today is $TODAY. The data root is $DATA_DIR. Follow the instructions in $REPO_DIR/processing/process-day-prompt.md. There may be data from multiple days - process each day found." \
+        --model sonnet \
+        --dangerously-skip-permissions \
+        --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" \
+        >> "$DATA_DIR/logs/$TODAY.log" 2>&1 || echo "[$TODAY] WARNING: Claude Code exited with an error. Check log: $DATA_DIR/logs/$TODAY.log"
+    echo "[$TODAY] Monolith analysis complete."
+fi
 
 # --- Backup analysis and corrections ---
 echo "[$TODAY] Backing up analysis and corrections..."
@@ -209,7 +235,7 @@ if [ "$RUN_PHASE2" = "1" ]; then
     if [ -f "$DATA_DIR/analysis/$TODAY.json" ]; then
         echo "[$TODAY] Running Phase 2: plan generation..."
         CLAUDECODE="" claude -p "Generate the meal plan and workout regimen for $TODAY. The data root is $DATA_DIR. The extracted data is at $EXTRACT_DIR. Follow the instructions in $REPO_DIR/processing/plan-prompt.md." \
-            --model sonnet \
+            --model haiku \
             --dangerously-skip-permissions \
             --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" \
             >> "$DATA_DIR/logs/$TODAY.log" 2>&1 \
@@ -228,13 +254,15 @@ fi
 
 # --- Upload results back to cloud relay ---
 echo "[$TODAY] Uploading analysis results to cloud relay..."
-for DATE in "${NEW_DATES[@]}"; do
+for DATE in "${NEW_DATES[@]+"${NEW_DATES[@]}"}"; do
     if [ -f "$DATA_DIR/analysis/$DATE.json" ]; then
         echo "[$TODAY] Uploading analysis for $DATE..."
+        GEN_VAL=$(echo "$GEN_JSON" | jq -r --arg d "$DATE" '.[$d] // empty' 2>/dev/null || echo '')
+        GEN_PARAM=$([ -n "$GEN_VAL" ] && echo "?gen=$GEN_VAL" || echo "")
         if curl -s -X POST \
             -H "Content-Type: application/json; charset=utf-8" \
             --data-binary "@$DATA_DIR/analysis/$DATE.json" \
-            "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/day/$DATE/done"; then
+            "$HEALTH_SYNC_URL/sync/$HEALTH_SYNC_KEY/day/$DATE/done${GEN_PARAM}"; then
             echo "[$TODAY] Uploaded results for $DATE"
         else
             echo "[$TODAY] WARNING: Failed to upload results for $DATE"

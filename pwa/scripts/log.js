@@ -439,7 +439,7 @@ const Log = {
 
     Promise.all([DB.getDailySummary(App.selectedDate), DB.getProfile('goals')]).then(([summary, goals]) => {
       const currentOz = summary.water_oz || 0;
-      const waterGoal = goals?.water_oz || 64;
+      const waterGoal = Goals.resolve(goals || {}).water_oz;
 
       const status = UI.createElement('div');
       status.style.cssText = 'text-align: center; margin-bottom: var(--space-md); font-size: var(--text-sm);';
