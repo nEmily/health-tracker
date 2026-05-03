@@ -178,7 +178,7 @@ const QuickLog = {
     const summary = await DB.getDailySummary(date);
     const currentOz = summary.water_oz || 0;
     const goals = await DB.getProfile('goals') || {};
-    const waterGoal = goals.water_oz || 64;
+    const waterGoal = Goals.resolve(goals).water_oz;
 
     const overlay = UI.createElement('div', 'modal-overlay');
     const sheet = UI.createElement('div', 'modal-sheet');
@@ -1421,11 +1421,11 @@ const App = {
         ` : `
         <label style="display: block; font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-sm);">Enter your pairing code</label>
         `}
-        <div id="pairing-inputs" style="display: flex; justify-content: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="0" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
-          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="1" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
-          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="2" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
-          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="3" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
+        <div role="group" aria-label="Pairing code" id="pairing-inputs" style="display: flex; justify-content: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
+          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="0" aria-label="Digit 1" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
+          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="1" aria-label="Digit 2" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
+          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="2" aria-label="Digit 3" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
+          <input type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pair-digit" data-idx="3" aria-label="Digit 4" style="width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); outline: none;" />
         </div>
         <p id="pair-status" style="font-size: var(--text-sm); color: var(--text-secondary); min-height: 1.4em; margin-bottom: var(--space-md); display: none;"></p>
         <a href="#" onclick="event.preventDefault(); App.showCoachSetup();" style="font-size: var(--text-xs); color: var(--text-secondary); text-decoration: underline;">Set up manually</a>
@@ -1771,6 +1771,9 @@ const App = {
   },
 
   async ensureDefaultGoals() {
+    const flag = await DB.getProfile('goalsMigrationV1');
+    if (flag && flag.done) return;
+
     const existing = await DB.getProfile('goals');
     if (!existing) {
       await DB.setProfile('goals', {
@@ -1785,6 +1788,8 @@ const App = {
       }
       if (changed) await DB.setProfile('goals', existing);
     }
+
+    await DB.setProfile('goalsMigrationV1', { done: true, ranAt: new Date().toISOString() });
   },
 
   // Attempt to restore data on fresh install using localStorage relay config backup
@@ -1883,9 +1888,10 @@ const App = {
 
     // Load existing goals
     const goals = await DB.getProfile('goals') || {};
+    const resolved = Goals.resolve(goals);
+    const hc = goals.hardcore || {};
 
     const sheet = UI.createElement('div', 'modal-sheet');
-    const hc = goals.hardcore || {};
     sheet.innerHTML = `
       <div class="modal-header">
         <span class="modal-title">Set Your Goals</span>
@@ -1895,7 +1901,7 @@ const App = {
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-sm);">
         <div class="form-group">
           <label class="form-label">Calories (great)</label>
-          <input type="number" class="form-input" id="gs-calories" value="${Number(goals.calories) || ''}" placeholder="2000" inputmode="numeric">
+          <input type="number" class="form-input" id="gs-calories" value="${resolved.calories || ''}" placeholder="2000" inputmode="numeric">
         </div>
         <div class="form-group">
           <label class="form-label">Calories (crush it)</label>
@@ -1903,7 +1909,7 @@ const App = {
         </div>
         <div class="form-group">
           <label class="form-label">Protein (great)</label>
-          <input type="number" class="form-input" id="gs-protein" value="${Number(goals.protein) || ''}" placeholder="100" inputmode="numeric">
+          <input type="number" class="form-input" id="gs-protein" value="${resolved.protein || ''}" placeholder="100" inputmode="numeric">
         </div>
         <div class="form-group">
           <label class="form-label">Protein (crush it)</label>
@@ -1911,7 +1917,7 @@ const App = {
         </div>
         <div class="form-group">
           <label class="form-label">Fiber (great)</label>
-          <input type="number" class="form-input" id="gs-fiber" value="${Number(goals.fiber) || ''}" placeholder="25" inputmode="numeric">
+          <input type="number" class="form-input" id="gs-fiber" value="${resolved.fiber || ''}" placeholder="25" inputmode="numeric">
         </div>
         <div class="form-group">
           <label class="form-label">Fiber (crush it)</label>
@@ -1920,7 +1926,7 @@ const App = {
       </div>
       <div class="form-group">
         <label class="form-label">Water Goal (oz)</label>
-        <input type="number" class="form-input" id="gs-water" value="${Number(goals.water_oz) || ''}" placeholder="64" inputmode="numeric">
+        <input type="number" class="form-input" id="gs-water" value="${resolved.water_oz || ''}" placeholder="64" inputmode="numeric">
       </div>
       <button class="btn btn-primary btn-block btn-lg" id="gs-save">Save Goals</button>
     `;
@@ -1941,12 +1947,54 @@ const App = {
       const hcProtein = parseInt(document.getElementById('gs-hc-protein')?.value) || null;
       const hcFiber = parseInt(document.getElementById('gs-hc-fiber')?.value) || null;
 
-      const newGoals = {
-        calories, protein, fiber, water_oz,
-        hardcore: { calories: hcCalories, protein: hcProtein, fiber: hcFiber, water_oz },
-      };
-      await DB.setProfile('goals', newGoals);
-      UI.toast('Goals saved');
+      // Build delta of fields the user actually changed (not blank-out values).
+      // Source of truth for goals is {DATA_DIR}/profile/goals.json on the processing
+      // machine — this delta is shipped to the cron via profile/goal-updates.json on
+      // the next upload. The cron applies, merges, and echoes the canonical shape
+      // back via pwaProfile.goals; importAnalysis overwrites the local cache.
+      const existing = (await DB.getProfile('goals')) || {};
+      const existingResolved = Goals.resolve(existing);
+      const delta = {};
+      if (calories != null && calories !== existingResolved.calories) delta.calories = calories;
+      if (protein != null && protein !== existingResolved.protein) delta.protein = protein;
+      if (fiber != null && fiber !== existingResolved.fiber) delta.fiber = fiber;
+      if (water_oz != null && water_oz !== existingResolved.water_oz) delta.water_oz = water_oz;
+      const hcDelta = {};
+      const ehc = existing.hardcore || {};
+      if (hcCalories != null && hcCalories !== ehc.calories) hcDelta.calories = hcCalories;
+      if (hcProtein != null && hcProtein !== ehc.protein) hcDelta.protein = hcProtein;
+      if (hcFiber != null && hcFiber !== ehc.fiber) hcDelta.fiber = hcFiber;
+      if (water_oz != null && water_oz !== ehc.water_oz) hcDelta.water_oz = water_oz;
+      if (Object.keys(hcDelta).length > 0) delta.hardcore = hcDelta;
+
+      // Optimistic local update preserving existing schema shape.
+      const isNested = existing.calories != null && typeof existing.calories === 'object';
+      let newGoals;
+      if (isNested) {
+        newGoals = { ...existing };
+        if (calories != null) newGoals.calories = { ...(existing.calories || {}), daily: calories };
+        if (protein != null) newGoals.protein = { ...(typeof existing.protein === 'object' && existing.protein ? existing.protein : {}), target: protein };
+        if (fiber != null) newGoals.fiber = { ...(typeof existing.fiber === 'object' && existing.fiber ? existing.fiber : {}), daily_g: fiber };
+        if (water_oz != null) newGoals.water = { ...(typeof existing.water === 'object' && existing.water ? existing.water : {}), daily_oz: water_oz };
+        newGoals.hardcore = { ...(existing.hardcore || {}), calories: hcCalories, protein: hcProtein, fiber: hcFiber };
+      } else {
+        newGoals = {
+          ...existing,
+          calories, protein, fiber, water_oz,
+          hardcore: { calories: hcCalories, protein: hcProtein, fiber: hcFiber, water_oz },
+        };
+      }
+      await DB.setProfileOwned('goals', newGoals, 'cron-via-delta');
+
+      // Queue delta for cron-side reconciliation (cron is the canonical writer).
+      if (Object.keys(delta).length > 0) {
+        await DB.queueGoalUpdate(delta, 'phone-settings');
+        // Trigger a sync so the cron sees the delta within ~30 min.
+        if (typeof CloudRelay !== 'undefined' && CloudRelay.queueUpload) {
+          CloudRelay.queueUpload(UI.today());
+        }
+      }
+      UI.toast('Goals saved — syncing to coach');
 
       // Always refresh the settings summary
       Settings.loadGoalsSummary();
@@ -2016,7 +2064,7 @@ const App = {
     const statsEl = document.getElementById('today-stats');
     if (!statsEl) return;
 
-    let foodCount = entries.filter(e => ['meal', 'snack', 'drink'].includes(e.type)).length;
+    let foodCount = entries.filter(e => ['meal', 'snack', 'drink', 'food'].includes(e.type)).length;
     let waterOz = summary.water_oz || 0;
     let weightVal = summary.weight ? summary.weight.value : null;
     let weightUnit = summary.weight ? summary.weight.unit : '';
@@ -2047,7 +2095,7 @@ const App = {
     let calTarget = null;
     const analysis = preloaded?.analysis ?? await DB.getAnalysis(date);
     const goals = preloaded?.goals ?? (await DB.getProfile('goals') || {});
-    calTarget = goals.calories || null;
+    calTarget = goals.calories != null ? Goals.resolve(goals).calories : null;
     if (analysis?.totals?.calories != null) {
       calEaten = analysis.totals.calories;
     }
@@ -2056,7 +2104,7 @@ const App = {
     if (entries.length === 0 && date) {
       if (analysis) {
         const aEntries = analysis.entries || [];
-        foodCount = aEntries.filter(e => ['meal', 'snack', 'drink'].includes(e.type)).length;
+        foodCount = aEntries.filter(e => ['meal', 'snack', 'drink', 'food'].includes(e.type)).length;
         waterOz = analysis.water_oz || waterOz;
         if (analysis.weight) { weightVal = analysis.weight.value || analysis.weight; weightUnit = analysis.weight.unit || 'lbs'; }
       }
@@ -2194,11 +2242,12 @@ const Settings = {
     if (!el) return;
     const goals = await DB.getProfile('goals');
     if (goals) {
+      const r = Goals.resolve(goals);
       const parts = [];
-      if (goals.calories) parts.push(`${goals.calories} cal`);
-      if (goals.protein) parts.push(`${goals.protein}g protein`);
-      if (goals.fiber) parts.push(`${goals.fiber}g fiber`);
-      if (goals.water_oz) parts.push(`${goals.water_oz} oz water`);
+      if (r.calories) parts.push(`${r.calories} cal`);
+      if (r.protein) parts.push(`${r.protein}g protein`);
+      if (r.fiber) parts.push(`${r.fiber}g fiber`);
+      if (r.water_oz) parts.push(`${r.water_oz} oz water`);
       el.textContent = parts.join(' \u00B7 ') || 'Not set';
     } else {
       el.textContent = 'Not set \u2014 tap Edit to configure';

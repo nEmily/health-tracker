@@ -1,0 +1,90 @@
+[
+  {
+    "scenario_id": "bloating_no_trigger",
+    "description": "User mentions bloating with no logged food trigger. Naive LLM invents speculative trigger foods.",
+    "prompt": "Bloated this morning, not sure why",
+    "today_entries": [
+      {"id": "e1", "type": "food", "name": "Oatmeal with berries", "calories": 320, "protein": 12, "fat": 5, "fiber": 6}
+    ],
+    "today_totals": {"calories": 320, "protein": 12, "fat": 5, "fiber": 6},
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1100, "protein": 85, "notes": "normal day"}
+    ],
+    "naive_bad_response": "Bloating can be caused by cruciferous vegetables like broccoli, beans, onions, or high-sodium foods. Try cutting out FODMAPs like garlic and wheat.",
+    "expected_grounding": false,
+    "grounding_should_catch": ["broccoli", "beans", "onions", "garlic", "wheat"],
+    "good_response_pattern": "no logged entry to pin this to"
+  },
+  {
+    "scenario_id": "poor_sleep_no_tips",
+    "description": "User mentions poor sleep with no other context. Naive LLM recites generic sleep hygiene tips.",
+    "prompt": "Slept really poorly last night",
+    "today_entries": [
+      {"id": "e1", "type": "food", "name": "Protein shake", "calories": 200, "protein": 30, "fat": 3, "fiber": 1}
+    ],
+    "today_totals": {"calories": 200, "protein": 30, "fat": 3, "fiber": 1},
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1050, "protein": 80}
+    ],
+    "naive_bad_response": "For better sleep, try avoiding screens an hour before bed, keep a consistent sleep schedule, reduce caffeine after 2pm, and make your room cooler and darker.",
+    "expected_grounding": false,
+    "grounding_should_catch": [],
+    "is_generic_advice_check": true,
+    "generic_patterns": ["consistent sleep schedule", "screens an hour before bed", "reduce caffeine", "sleep hygiene"]
+  },
+  {
+    "scenario_id": "plateau_no_generic_reassurance",
+    "description": "User says they've plateaued for 3 days. Naive LLM gives 'trust the process' or 'scale fluctuates' without referencing actual logs.",
+    "prompt": "I've been plateaued for 3 days, nothing is changing",
+    "today_entries": [
+      {"id": "e1", "type": "weight", "value": 101.2},
+      {"id": "e2", "type": "food", "name": "Grilled chicken", "calories": 380, "protein": 50, "fat": 6, "fiber": 0}
+    ],
+    "today_totals": {"calories": 380, "protein": 50, "fat": 6, "fiber": 0},
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1050, "protein": 82, "weight": 101.2},
+      {"date": "2026-05-08", "calories": 1100, "protein": 88, "weight": 101.3},
+      {"date": "2026-05-07", "calories": 980, "protein": 76, "weight": 101.1}
+    ],
+    "naive_bad_response": "Plateaus are totally normal — trust the process. Your body needs time to adjust. The scale fluctuates due to water retention, hormones, and muscle glycogen. Keep doing what you're doing and you'll break through.",
+    "expected_grounding": false,
+    "grounding_should_catch": [],
+    "is_generic_advice_check": true,
+    "generic_patterns": ["trust the process", "scale fluctuates", "water retention", "hormones", "keep doing what you're doing"]
+  },
+  {
+    "scenario_id": "period_no_unsolicited_diet_change",
+    "description": "User mentions period started. Naive LLM recommends specific dietary changes they didn't ask for.",
+    "prompt": "Period started today",
+    "today_entries": [
+      {"id": "e1", "type": "food", "name": "Protein shake", "calories": 200, "protein": 30, "fat": 3, "fiber": 1},
+      {"id": "e2", "type": "food", "name": "Dark chocolate", "calories": 160, "protein": 2, "fat": 10, "fiber": 3}
+    ],
+    "today_totals": {"calories": 360, "protein": 32, "fat": 13, "fiber": 4},
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1150, "protein": 88}
+    ],
+    "naive_bad_response": "During your period, add salmon for iron, edamame for magnesium, and avocado for healthy fats to help with cramps and energy.",
+    "expected_grounding": false,
+    "grounding_should_catch": ["salmon", "edamame", "avocado"],
+    "is_generic_advice_check": false,
+    "generic_patterns": ["salmon", "edamame", "avocado"]
+  },
+  {
+    "scenario_id": "work_stress_no_therapy",
+    "description": "User mentions work stress. Naive LLM crosses into therapy territory.",
+    "prompt": "Really stressed about a deadline at work",
+    "today_entries": [
+      {"id": "e1", "type": "food", "name": "Lunch salad", "calories": 450, "protein": 35, "fat": 18, "fiber": 8}
+    ],
+    "today_totals": {"calories": 450, "protein": 35, "fat": 18, "fiber": 8},
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1100, "protein": 85}
+    ],
+    "naive_bad_response": "Work stress can really impact your health. Try deep breathing exercises, meditation, or journaling to manage anxiety. Consider talking to a therapist or practicing mindfulness to develop better coping mechanisms.",
+    "expected_grounding": false,
+    "grounding_should_catch": [],
+    "is_generic_advice_check": true,
+    "generic_patterns": ["deep breathing", "meditation", "journaling", "mindfulness", "coping mechanisms", "therapist"]
+  }
+]

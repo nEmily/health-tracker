@@ -1,0 +1,57 @@
+{
+  "days": [
+    {
+      "date": "2026-05-02",
+      "source": "coach-session-test",
+      "meals": [
+        {
+          "meal": "breakfast",
+          "name": "Protein oats",
+          "calories": 350,
+          "protein": 28,
+          "fat": 8,
+          "fiber": 5,
+          "prep_time": 5,
+          "ingredients": [
+            {"name": "Rolled oats", "grams": 60, "cal": 220, "protein": 8},
+            {"name": "Protein powder", "grams": 30, "cal": 130, "protein": 20}
+          ]
+        },
+        {
+          "meal": "lunch",
+          "name": "Chicken rice bowl",
+          "calories": 508,
+          "protein": 50,
+          "fat": 8,
+          "fiber": 3,
+          "prep_time": 15,
+          "ingredients": [
+            {"name": "Grilled chicken breast", "grams": 150, "cal": 248, "protein": 46},
+            {"name": "Brown rice", "grams": 100, "cal": 216, "protein": 4},
+            {"name": "Olive oil", "grams": 5, "cal": 44, "protein": 0}
+          ]
+        },
+        {
+          "meal": "dinner",
+          "name": "Salmon with vegetables",
+          "calories": 505,
+          "protein": 42,
+          "fat": 24,
+          "fiber": 6,
+          "prep_time": 20,
+          "ingredients": [
+            {"name": "Salmon fillet", "grams": 180, "cal": 374, "protein": 40},
+            {"name": "Broccoli", "grams": 150, "cal": 51, "protein": 4},
+            {"name": "Avocado", "grams": 50, "cal": 80, "protein": 1}
+          ]
+        }
+      ],
+      "day_totals": {
+        "calories": 1363,
+        "protein": 120,
+        "fat": 40,
+        "fiber": 14
+      }
+    }
+  ]
+}

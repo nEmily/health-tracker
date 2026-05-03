@@ -14,14 +14,17 @@ You are generating a meal plan and workout regimen based on today's health data.
 
 1. **Read Phase 1 analysis** at `{DATA_DIR}/analysis/{DATE}.json`. Extract `totals` (calories/protein eaten so far), `goals` (targets), and `entries` (what was eaten/done). These are read-only -- never modify them.
 
-2. **Read profile files** (check BOTH locations -- ZIP-bundled takes priority):
-   - `{EXTRACT_DIR}/profile/goals.json` -- goals bundled from PWA (most current, use first)
-   - `{EXTRACT_DIR}/profile/preferences.json` -- dietary preferences, meal structure
-   - `{DATA_DIR}/profile/regimen.json` -- baseline workout program (phases, equipment, weekly schedule)
+2. **Read profile files** (`{DATA_DIR}` is the canonical source — phone no longer authors goals):
+   - `{DATA_DIR}/profile/goals.json` -- **CANONICAL goals.** Sole writer is the /coach skill (or Phase 1 reconciliation of `goal-updates.json`). Always read this.
+   - `{DATA_DIR}/profile/preferences.json` -- **CANONICAL preferences** (dietary, mealPlan structure, dailyStaples, coachingTone). Always read.
+   - `{DATA_DIR}/profile/regimen.json` -- baseline workout program (phases, equipment, weekly schedule, supplement protocol).
    - `{DATA_DIR}/profile/identity.md` -- immutable identity facts, equipment constraints (optional)
    - `{DATA_DIR}/profile/current-stats.json` -- **source of truth for current weight, trends, streaks** (computed every cycle)
-   - DEPRECATED — do not read: `bio.txt`, `measurements.json`
+   - `{EXTRACT_DIR}/profile/pwa-profile.json` -- phone-only state (supplements, custom entry types). Does NOT contain goals as of 2026-05-02. If you find a goals field there, ignore it.
+   - DEPRECATED — do not read: `{EXTRACT_DIR}/profile/goals.json` (no longer authored by phone), `bio.txt`, `measurements.json`
    - Recent analysis files at `{DATA_DIR}/analysis/` for the past 3-7 days -- for workout weekly review
+
+   **Architectural invariant:** Goals are owned by `{DATA_DIR}/profile/goals.json`. The phone is a read-only cache that receives canonical goals via `pwaProfile.goals` echo. Never read goals from any `{EXTRACT_DIR}` file.
 
 2b. **Check for coach-requested plan changes:**
    - Read the Phase 1 analysis for `coachResponses` -- if any response mentions a plan change or regimen update, factor that into the plan generation.
@@ -33,6 +36,8 @@ You are generating a meal plan and workout regimen based on today's health data.
    - **FIRST: check for coach-session commits and preserve them.** Before generating anything:
      1. **Today's current analysis file** -- if it already has a `mealPlan` with top-level `source` starting `coach-session`, **preserve the ENTIRE mealPlan verbatim and skip meal plan generation entirely**. Do not regenerate ANY day. A coach-session meal plan is authoritative until manually replaced.
      2. **Yesterday's analysis file** at `{DATA_DIR}/analysis/<yesterday>.json` -- iterate its `mealPlan.days[]`. For each day with `source` starting `coach-session` AND date is today or future, copy that day verbatim into today's output mealPlan.
+     3. **Look back further when a recent coachResponse mentions plan changes.** Scan the last 3 analysis files for `coachResponses` whose text says "locked in", "plan for tomorrow", "committed plan", or similar. If such a response exists and its referenced day is today or future, treat any plan it described as coach-session-equivalent — preserve verbatim. Live /coach sessions sometimes describe a plan in coachResponses without writing the structured `mealPlan.days[].source` field; this rule catches that case so the plan is not stomped.
+     4. **If `_planRequested: true` is set** for today's analysis, you MAY regenerate today's plan, but only after exhausting the checks above. A coach-session commit beats `_planRequested`.
    - For any date NOT covered by coach-session preservation above, generate fresh per the rules below.
    - **Tag every generated day with `"source": "phase-2-processing"`.** Coach-session commits use `"source": "coach-session"`. This is how the preservation check above works across runs.
    - **Read `preferences.json` first** -- it defines meal structure (meals per day, office vs home day split, OMAD rules, snack policy). Follow it exactly.

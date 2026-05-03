@@ -53,7 +53,7 @@ const ProgressView = {
           const suggested = parseInt(acceptBtn.dataset.suggested, 10);
           if (!suggested) return;
           const goals = await DB.getProfile('goals') || {};
-          const oldCal = goals.calories || 2000;
+          const oldCal = Goals.resolve(goals).calories;
           goals.calories = suggested;
           // Also update hardcore variant proportionally
           if (goals.hardcore?.calories) {
@@ -63,7 +63,10 @@ const ProgressView = {
           // Mark as accepted to prevent immediate re-suggestion
           if (!goals.adaptive) goals.adaptive = {};
           goals.adaptive.acceptedAt = Date.now();
-          await DB.setProfile('goals', goals);
+          // Optimistic local update so the UI reflects the change immediately.
+          await DB.setProfileOwned('goals', goals, 'cron-via-delta');
+          // Queue delta so cron applies the acceptance and echoes back canonical shape.
+          await DB.queueGoalUpdate({ adaptive: { acceptedAt: goals.adaptive.acceptedAt } }, 'adaptive-suggestion');
           UI.toast(`Calorie target updated to ${suggested} cal/day`);
           await ProgressView.init();
         });
@@ -73,7 +76,10 @@ const ProgressView = {
           const goals = await DB.getProfile('goals') || {};
           if (!goals.adaptive) goals.adaptive = {};
           goals.adaptive.dismissedAt = Date.now();
-          await DB.setProfile('goals', goals);
+          // Optimistic local update so the card hides immediately.
+          await DB.setProfileOwned('goals', goals, 'cron-via-delta');
+          // Queue delta so cron records the dismissal and respects the cooldown.
+          await DB.queueGoalUpdate({ adaptive: { dismissedAt: goals.adaptive.dismissedAt } }, 'adaptive-suggestion');
           await ProgressView.init();
         });
       }
@@ -153,8 +159,9 @@ const ProgressView = {
     const startDate = timeline.start || today;
     const analyses = await DB.getAnalysisRange(startDate, today);
     if (analyses.length > 0) {
-      const calTarget = goals.calories || 2000;
-      const proTarget = goals.protein || 105;
+      const _rg = Goals.resolve(goals);
+      const calTarget = _rg.calories;
+      const proTarget = _rg.protein;
       const calHits = analyses.filter(a => (a.totals?.calories || 0) <= calTarget * 1.1).length;
       const proHits = analyses.filter(a => (a.totals?.protein || 0) >= proTarget * 0.85).length;
       const workoutDays = analyses.filter(a => (a.entries || []).some(e => e.type === 'workout')).length;
@@ -485,7 +492,7 @@ const ProgressView = {
     const lastAvgPro = avg(lastWeek, a => a.totals?.protein || 0);
     const thisWorkouts = thisWeek.filter(a => (a.entries || []).some(e => e.type === 'workout')).length;
     const lastWorkouts = lastWeek.filter(a => (a.entries || []).some(e => e.type === 'workout')).length;
-    const waterTarget = goals.water_oz || 64;
+    const waterTarget = Goals.resolve(goals).water_oz;
     const thisWater = thisWeek.filter(a => (a.goals?.water?.actual_oz || 0) >= waterTarget).length;
     const lastWater = lastWeek.filter(a => (a.goals?.water?.actual_oz || 0) >= waterTarget).length;
 
@@ -1285,6 +1292,8 @@ const ProgressView = {
 
   _scoreFromAnalysis(analysis, goals, regimen) {
     if (!analysis) return { moderate: null, hardcore: null };
+    const _r = Goals.resolve(goals);
+    const _hr = goals.hardcore ? Goals.resolve(goals.hardcore) : _r;
     const totals = analysis.totals || {};
     const cal = totals.calories || 0;
     const pro = totals.protein || 0;
@@ -1318,8 +1327,8 @@ const ProgressView = {
     };
 
     return {
-      moderate: calc({ calories: goals.calories || 2000, protein: goals.protein || 100, water: goals.water_oz || 64 }),
-      hardcore: calc({ calories: goals.hardcore?.calories || 1500, protein: goals.hardcore?.protein || 130, water: goals.hardcore?.water_oz || 64 }),
+      moderate: calc({ calories: _r.calories, protein: _r.protein, water: _r.water_oz }),
+      hardcore: calc({ calories: _hr.calories || _r.calories, protein: _hr.protein || _r.protein, water: _hr.water_oz || _r.water_oz }),
     };
   },
 
@@ -1396,9 +1405,10 @@ const ProgressView = {
   },
 
   renderAverages(analyses, goals) {
-    const calTarget = goals.calories || 2000;
-    const proTarget = goals.protein || 100;
-    const waterTarget = goals.water_oz || 64;
+    const _ra = Goals.resolve(goals);
+    const calTarget = _ra.calories;
+    const proTarget = _ra.protein;
+    const waterTarget = _ra.water_oz;
 
     const count = analyses.length || 1;
     const avgCal = Math.round(analyses.reduce((s, a) => s + (a.totals?.calories || 0), 0) / count);
@@ -1749,7 +1759,7 @@ const ProgressView = {
     const analyses = await DB.getAnalysisRange(monday, today);
     if (analyses.length === 0) return '';
 
-    const calTarget = goals.calories || 2000;
+    const calTarget = Goals.resolve(goals).calories;
     let totalDeficit = 0;
     for (const a of analyses) {
       const actual = a.totals?.calories || 0;
@@ -1796,7 +1806,7 @@ const ProgressView = {
     const actualPerWeek = ((last.weight - first.weight) / daysBetween * 7).toFixed(1);
 
     // Expected from deficit
-    const calTarget = goals.calories || 2000;
+    const calTarget = Goals.resolve(goals).calories;
     let totalDeficit = 0;
     let daysWithData = 0;
     for (const a of analyses) {

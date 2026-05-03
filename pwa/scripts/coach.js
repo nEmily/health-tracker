@@ -19,8 +19,8 @@ const CoachChat = {
         if (hard.water) parts.push(`Hardcore water goal updated to ${hard.water}L`);
       }
       // Flat goals (legacy)
-      if (goals.calories) parts.push(`Calorie goal updated to ${goals.calories}`);
-      if (goals.protein) parts.push(`Protein goal updated to ${goals.protein}g`);
+      if (goals.calories != null) parts.push(`Calorie goal updated to ${Goals.resolve(goals).calories}`);
+      if (goals.protein != null) parts.push(`Protein goal updated to ${Goals.resolve(goals).protein}g`);
       if (goals.water) parts.push(`Water goal updated to ${goals.water}L`);
     }
 
@@ -46,38 +46,34 @@ const CoachChat = {
 
     // Merge user messages from dailySummary with coach responses from analysis
     const userMessages = (summary.coachChat || []).filter(m => m.role === 'user');
-    const coachMessages = (analysis?.coachResponses || []);
+    const rawCoachMessages = (analysis?.coachResponses || []);
 
-    // Build timeline: pair each user message with its coach reply (grouped Q&A).
-    // User messages are in send-order from the array; replies follow their question.
-    // General (non-reply) coach messages go at the top as proactive advice.
-    const timeline = [];
+    // Normalize respondsTo: prefer array field, fall back to [replyTo] for old entries
+    const coachMessages = rawCoachMessages.map(cm => ({
+      ...cm,
+      respondsTo: Array.isArray(cm.respondsTo) ? cm.respondsTo : (cm.replyTo ? [cm.replyTo] : []),
+    }));
 
-    // Proactive coach messages first (not replies to user questions)
+    // Determine which user messages have a coach reply
+    const answeredIds = new Set();
     for (const cm of coachMessages) {
-      if (!cm.replyTo) {
-        timeline.push({ role: 'coach', text: cm.text, timestamp: cm.timestamp || 0 });
-      }
+      for (const id of cm.respondsTo) answeredIds.add(id);
     }
+    const hasUnanswered = userMessages.some(m => !answeredIds.has(m.id));
 
-    // Then user messages paired with their replies
+    // Build chronological timeline: all user messages + all coach responses sorted by timestamp
+    const timeline = [];
     for (const msg of userMessages) {
-      timeline.push(msg);
-      const response = coachMessages.find(r => r.replyTo === msg.id);
-      if (response) {
-        timeline.push({ role: 'coach', text: response.text, timestamp: response.timestamp || msg.timestamp + 1 });
-        // Add setting update notification after the coach response, if present
-        if (response.settingUpdates) {
-          timeline.push({
-            role: 'settings',
-            updates: response.settingUpdates,
-            timestamp: (response.timestamp || msg.timestamp + 1) + 1
-          });
-        }
+      timeline.push({ role: 'user', text: msg.text || msg.content, timestamp: msg.timestamp || 0 });
+    }
+    for (const cm of coachMessages) {
+      const ts = cm.timestamp || 0;
+      timeline.push({ role: 'coach', text: cm.text || cm.content, timestamp: ts });
+      if (cm.settingUpdates) {
+        timeline.push({ role: 'settings', updates: cm.settingUpdates, timestamp: ts + 1 });
       }
     }
-
-    const hasUnanswered = userMessages.some(m => !coachMessages.find(r => r.replyTo === m.id));
+    timeline.sort((a, b) => a.timestamp - b.timestamp);
 
     let html = '<div class="coach-chat">';
 

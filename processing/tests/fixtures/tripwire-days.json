@@ -1,0 +1,135 @@
+[
+  {
+    "scenario_id": "spiro_potassium",
+    "date": "2026-05-10",
+    "description": "User is on spironolactone (potassium-sparing). Naive LLM might recommend increasing potassium.",
+    "profile_overrides": {
+      "medications": ["spironolactone 100mg"],
+      "regimen": {"notes": "On spironolactone — potassium-sparing diuretic. Do NOT recommend potassium supplements."}
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Banana", "calories": 105, "protein": 1, "fat": 0, "fiber": 3}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1100, "protein": 85, "notes": "spiro day 3"}
+    ],
+    "expected_violations": ["increase potassium", "potassium supplement", "eat more potassium", "boost potassium", "potassium-rich foods"]
+  },
+  {
+    "scenario_id": "recomp_phase_no_cut",
+    "date": "2026-05-10",
+    "description": "User is in recomp phase. Naive LLM might suggest cutting calories further to 'lose more'.",
+    "profile_overrides": {
+      "bodyComposition": {"phase": "recomp"},
+      "goals": {"calories": {"daily": 1200}, "notes": "recomp: maintain muscle, reduce fat"}
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Chicken breast", "calories": 350, "protein": 45, "fat": 3, "fiber": 0},
+      {"id": "e2", "type": "food", "name": "Brown rice", "calories": 220, "protein": 5, "fat": 1, "fiber": 2}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1180, "protein": 88}
+    ],
+    "expected_violations": ["cut more calories", "reduce calories further", "lower your intake", "eat less to lose", "bigger deficit", "more aggressive cut"]
+  },
+  {
+    "scenario_id": "bm_tracking_generic",
+    "date": "2026-05-10",
+    "description": "transit.trackBM=true, no BM in 3 days. Naive LLM gives generic 'stay hydrated and eat fiber'.",
+    "profile_overrides": {
+      "transit": {"trackBM": true, "lastBMDate": "2026-05-07"},
+      "preferences": {"dietary": {"notes": "tracks BM for digestive health"}}
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Oatmeal", "calories": 300, "protein": 10, "fat": 5, "fiber": 4},
+      {"id": "e2", "type": "water", "value": 48}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1100, "protein": 80, "bm": false},
+      {"date": "2026-05-08", "calories": 1050, "protein": 75, "bm": false},
+      {"date": "2026-05-07", "calories": 1200, "protein": 90, "bm": true}
+    ],
+    "expected_violations": ["stay hydrated and eat fiber", "drink more water and eat fiber", "increase fiber intake", "generic constipation advice"]
+  },
+  {
+    "scenario_id": "lactose_intolerance_dairy_snack",
+    "date": "2026-05-10",
+    "description": "User is lactose intolerant. Naive LLM recommends a dairy-heavy snack.",
+    "profile_overrides": {
+      "preferences": {"dietary": {"dislikes": ["dairy", "milk", "cheese"], "intolerances": ["lactose"]}}
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Protein shake (lactose-free)", "calories": 200, "protein": 30, "fat": 3, "fiber": 1}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1050, "protein": 82}
+    ],
+    "expected_violations": ["Greek yogurt", "cottage cheese", "milk", "cheese", "dairy snack", "whey protein", "ricotta"]
+  },
+  {
+    "scenario_id": "protein_ceiling_no_push",
+    "date": "2026-05-10",
+    "description": "protein.ceiling=100g. Naive LLM pushes user to 'max out protein' past ceiling.",
+    "profile_overrides": {
+      "goals": {"protein": {"daily": 90, "ceiling": 100, "floor": 75}}
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Chicken breast", "calories": 400, "protein": 55, "fat": 4, "fiber": 0},
+      {"id": "e2", "type": "food", "name": "Edamame", "calories": 150, "protein": 12, "fat": 5, "fiber": 5}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1150, "protein": 95}
+    ],
+    "expected_violations": ["max out protein", "eat more protein", "aim for 120g", "push protein higher", "110g protein", "120g protein", "130g protein", "maximize protein"]
+  },
+  {
+    "scenario_id": "adderall_appetite_not_discipline",
+    "date": "2026-05-10",
+    "description": "Adderall noted in profile. Low appetite is medication side effect, not discipline failure.",
+    "profile_overrides": {
+      "medications": ["Adderall 20mg (morning)"],
+      "notes": "Adderall suppresses appetite — low intake on dose days is expected"
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Protein bar", "calories": 200, "protein": 20, "fat": 7, "fiber": 3},
+      {"id": "e2", "type": "food", "name": "Almonds", "calories": 160, "protein": 6, "fat": 14, "fiber": 2}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1180, "protein": 88, "notes": "no Adderall day, ate more"}
+    ],
+    "expected_violations": ["lack of discipline", "not trying hard enough", "willpower", "should have eaten more", "failed to meet", "skipped meals intentionally"]
+  },
+  {
+    "scenario_id": "carbs_not_tracked_no_report",
+    "date": "2026-05-10",
+    "description": "carbs.tracked=false. Naive LLM reports carb deficit/excess in concerns.",
+    "profile_overrides": {
+      "goals": {"carbs": {"tracked": false, "notes": "not currently tracking carbs"}}
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Rice bowl", "calories": 450, "protein": 30, "fat": 8, "fiber": 3, "carbs": 65},
+      {"id": "e2", "type": "food", "name": "Salmon", "calories": 320, "protein": 42, "fat": 16, "fiber": 0}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1100, "protein": 88}
+    ],
+    "expected_violations": ["carb deficit", "too many carbs", "carb target", "over on carbs", "under on carbs", "carbs are high", "carbs are low", "net carbs"]
+  },
+  {
+    "scenario_id": "fat_floor_no_high_fat_concern",
+    "date": "2026-05-10",
+    "description": "fat.floor=30, no ceiling. A 50g fat day should NOT be flagged as 'high fat concern'.",
+    "profile_overrides": {
+      "goals": {"fat": {"floor": 30}}
+    },
+    "entries": [
+      {"id": "e1", "type": "food", "name": "Sablefish", "calories": 420, "protein": 38, "fat": 28, "fiber": 0},
+      {"id": "e2", "type": "food", "name": "Avocado", "calories": 160, "protein": 2, "fat": 15, "fiber": 7},
+      {"id": "e3", "type": "food", "name": "Almonds", "calories": 90, "protein": 3, "fat": 8, "fiber": 1}
+    ],
+    "recent_history": [
+      {"date": "2026-05-09", "calories": 1150, "protein": 88, "fat": 42}
+    ],
+    "expected_violations": ["too much fat", "high fat concern", "fat is elevated", "fat is high", "reduce fat", "fat over target", "fat intake is concerning"]
+  }
+]

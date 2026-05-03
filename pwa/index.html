@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#0d1117">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Coach">
@@ -98,7 +99,7 @@
         <div class="s-card s-card--accent s-card--first">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Daily Targets</h3>
+              <div class="s-title">Daily Targets</div>
               <p class="s-subtitle" id="goals-summary">Loading...</p>
             </div>
             <button class="s-action-btn" onclick="App.showGoalSetup()">Edit</button>
@@ -109,7 +110,7 @@
         <div class="s-card s-card--last">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Dailies</h3>
+              <div class="s-title">Dailies</div>
               <p class="s-subtitle">Supplements, vitamins, and daily items</p>
             </div>
             <button class="s-action-btn" onclick="QuickLog.showDailiesManager()">Manage</button>
@@ -125,7 +126,7 @@
           <!-- Status row -->
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Cloud Sync</h3>
+              <div class="s-title">Cloud Sync</div>
               <p class="s-subtitle" id="cloud-sync-status">Not configured</p>
             </div>
             <button class="s-action-btn" onclick="CloudRelay.showSetup()">Setup</button>
@@ -150,7 +151,7 @@
         <div class="s-card s-card--first">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Period Tracking</h3>
+              <div class="s-title">Period Tracking</div>
               <p class="s-subtitle">Track your cycle on the Today screen</p>
             </div>
             <label class="s-toggle">
@@ -163,11 +164,11 @@
         <div class="s-card s-card--last">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">BM Tracking</h3>
+              <div class="s-title">BM Tracking</div>
               <p class="s-subtitle">Log bowel movements for digestive health insights</p>
             </div>
             <label class="s-toggle">
-              <input type="checkbox" id="toggle-track-bm">
+              <input type="checkbox" id="toggle-track-bm" aria-label="BM Tracking">
               <span class="s-toggle-track"></span>
             </label>
           </div>
@@ -182,10 +183,10 @@
         <div class="s-card s-card--first">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Weight Unit</h3>
+              <div class="s-title">Weight Unit</div>
               <p class="s-subtitle">Used for logging and display</p>
             </div>
-            <select class="s-action-btn" id="weight-unit-select" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--text-sm);">
+            <select class="s-action-btn" id="weight-unit-select" aria-label="Weight Unit" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--text-sm);">
               <option value="lbs">lbs</option>
               <option value="kg">kg</option>
             </select>
@@ -196,10 +197,10 @@
         <div class="s-card">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Day Starts At</h3>
+              <div class="s-title">Day Starts At</div>
               <p class="s-subtitle">Entries before this time count as the previous day</p>
             </div>
-            <select class="s-action-btn" id="day-boundary-select" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--text-sm);">
+            <select class="s-action-btn" id="day-boundary-select" aria-label="Day Starts At" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--text-sm);">
               <option value="0">Midnight</option>
               <option value="1">1 AM</option>
               <option value="2">2 AM</option>
@@ -215,7 +216,7 @@
         <div class="s-card">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Storage</h3>
+              <div class="s-title">Storage</div>
               <p class="s-subtitle" id="storage-info">Loading...</p>
             </div>
             <button class="btn btn-danger s-inline-danger" id="clear-photos-btn" onclick="Settings.clearPhotos()" style="display:none;">Clear</button>
@@ -226,7 +227,7 @@
         <div class="s-card">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Setup Guide</h3>
+              <div class="s-title">Setup Guide</div>
               <p class="s-subtitle">AI processing setup for your computer</p>
             </div>
             <a class="s-action-btn" href="welcome.html" target="_blank" rel="noopener" style="text-decoration:none; display:flex; align-items:center;">View</a>
@@ -237,7 +238,7 @@
         <div class="s-card s-card--last">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Update App</h3>
+              <div class="s-title">Update App</div>
               <p class="s-subtitle">Coach <span id="app-version" class="s-version-badge"></span></p>
             </div>
             <button class="s-action-btn" id="update-app-btn">Update</button>
@@ -252,7 +253,7 @@
         <div class="s-card s-card--only">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title">Coach Chat History</h3>
+              <div class="s-title">Coach Chat History</div>
               <p class="s-subtitle">Delete all coach messages and replies stored on this device.</p>
             </div>
             <button class="btn btn-secondary s-inline-danger" onclick="Settings.clearCoachHistory()">Clear</button>
@@ -267,7 +268,7 @@
         <div class="s-card s-card--only s-card--danger">
           <div class="s-card-row">
             <div class="s-card-body">
-              <h3 class="s-title s-title--danger">Delete All Data</h3>
+              <div class="s-title s-title--danger">Delete All Data</div>
               <p class="s-subtitle">Permanently wipe all entries, photos, and settings from this device.</p>
             </div>
             <button class="btn btn-danger s-inline-danger" onclick="Settings.deleteAllData()">Delete</button>
@@ -316,7 +317,9 @@
 
   <!-- Scripts (order matters) -->
   <script src="scripts/db.js"></script>
+  <script src="scripts/time.js"></script>
   <script src="scripts/ui.js"></script>
+  <script src="scripts/goals-resolver.js"></script>
   <script src="scripts/log.js"></script>
   <script src="scripts/camera.js"></script>
   <script src="scripts/sync.js"></script>

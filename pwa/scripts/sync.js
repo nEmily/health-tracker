@@ -12,44 +12,53 @@ const Sync = {
     const logJson = JSON.stringify(data.log, null, 2);
     files.push({ name: `daily/${date}/log.json`, data: new TextEncoder().encode(logJson) });
 
-    // Bundle user profile so processing uses actual targets + profile survives reinstalls
-    const goals = await DB.getProfile('goals');
-    if (goals) {
-      const hc = goals.hardcore || {};
-      // Derive carb/fat targets from actual calorie budget rather than generic defaults.
-      // At e.g. 850 cal / 100g protein: remaining = 450 cal → ~68g carbs, ~18g fat.
-      const calTarget = goals.calories || 2000;
-      const proteinG = goals.protein || 100;
-      const remainingCal = Math.max(0, calTarget - proteinG * 4);
-      const carbsG = Math.round((remainingCal * 0.60) / 4);
-      const fatG = Math.round((remainingCal * 0.35) / 9);
-      const goalsJson = JSON.stringify({
-        calories: { daily: calTarget, adjustment: 'User-configured goal' },
-        macros: {
-          protein: { grams: proteinG, priority: 'high' },
-          carbs: { grams: carbsG, priority: 'medium' },
-          fat: { grams: fatG, priority: 'low' },
-        },
-        water: { daily_oz: goals.water_oz || 64 },
-        fiber: { daily_g: goals.fiber || 25 },
-        hardcore: {
-          calories: { daily: hc.calories || 1500 },
-          macros: { protein: { grams: hc.protein || 130 } },
-          water: { daily_oz: hc.water_oz || 64 },
-          fiber: { daily_g: hc.fiber || goals.fiber || 25 },
-        },
-      }, null, 2);
-      files.push({ name: `profile/goals.json`, data: new TextEncoder().encode(goalsJson) });
+    // GOALS ARCHITECTURE (2026-05-02):
+    //
+    // The phone is a READ-ONLY CACHE for goals. The sole writer is the /coach skill
+    // editing {DATA_DIR}/profile/goals.json on the processing machine. The phone
+    // therefore does NOT upload profile/goals.json — uploading a phone-fabricated
+    // snapshot was overwriting the canonical rich-shape goals with a narrow flat
+    // shape (lost protein floor/ceiling, fat floor, fiber range, weight floor,
+    // bodyComposition, transit, etc.).
+    //
+    // Phone-side goal changes from Settings UI write to IndexedDB optimistically
+    // AND queue a delta in profile/goal-updates.json (see DB.queueGoalUpdate). The
+    // cron applies the delta to canonical goals.json, then echoes the merged shape
+    // back via pwaProfile.goals on the next analysis sync. Phone's local cache gets
+    // overwritten in importAnalysis (db.js).
+    //
+    // pwa-profile.json bundles phone-only state that the cron does NOT author:
+    // supplements, bodyPhotoTypes, moreOptions, preferences. Goals are deliberately
+    // EXCLUDED from pwa-profile.json — the cron must read goals from {DATA_DIR}.
 
-      // Also bundle raw PWA profile for round-trip restore on reinstall
+    // Phone-only profile data (NOT goals — those are owned by /coach + cron)
+    const supplements = await DB.getProfile('supplements');
+    const bodyPhotoTypes = await DB.getProfile('bodyPhotoTypes');
+    const moreOptions = await DB.getProfile('moreOptions');
+    const preferences = await DB.getProfile('preferences');
+    if (supplements || bodyPhotoTypes || moreOptions || preferences) {
       const pwaProfile = {
-        goals,
-        supplements: await DB.getProfile('supplements'),
-        bodyPhotoTypes: await DB.getProfile('bodyPhotoTypes'),
-        moreOptions: await DB.getProfile('moreOptions'),
-        preferences: await DB.getProfile('preferences'),
+        // NOTE: no `goals` field — see architecture comment above.
+        supplements,
+        bodyPhotoTypes,
+        moreOptions,
+        preferences,
       };
       files.push({ name: `profile/pwa-profile.json`, data: new TextEncoder().encode(JSON.stringify(pwaProfile, null, 2)) });
+    }
+
+    // Goal-update deltas queued from the Settings UI (if any). Cron applies these
+    // to {DATA_DIR}/profile/goals.json. The phone clears the queue in _doUpload's
+    // success branch (see clearGoalUpdates call below).
+    const pendingGoalUpdates = await DB.getPendingGoalUpdates();
+    if (pendingGoalUpdates && pendingGoalUpdates.length > 0) {
+      // Stash the latest queued timestamp so we only clear what we actually shipped
+      // (entries queued mid-upload will survive).
+      this._lastQueuedGoalUpdateAt = Math.max(...pendingGoalUpdates.map(e => e.timestamp || 0));
+      files.push({
+        name: `profile/goal-updates.json`,
+        data: new TextEncoder().encode(JSON.stringify({ updates: pendingGoalUpdates }, null, 2)),
+      });
     }
 
     for (const photo of data.photoFiles) {
@@ -576,6 +585,16 @@ const CloudRelay = {
         await Sync.markPhotosSynced(date);
         CloudRelay.setSyncStatus('synced');
         CloudRelay.recordUploadTime(date);
+        // Clear goal-update queue entries we just shipped (timestamp gate avoids
+        // racing with new entries queued mid-upload).
+        if (this._lastQueuedGoalUpdateAt) {
+          try {
+            await DB.clearGoalUpdates(this._lastQueuedGoalUpdateAt);
+          } catch (e) {
+            this.log(`Failed to clear goal-update queue: ${e.message || e}`, 'error');
+          }
+          this._lastQueuedGoalUpdateAt = 0;
+        }
         this.log(`Uploaded ${date} successfully`, 'ok');
         // Refresh day view so "pending upload" badges clear
         if (typeof App !== 'undefined' && date === App.selectedDate) App.loadDayView();

@@ -1,0 +1,343 @@
+"""
+invoke_day_synthesis.py — The holistic synthesis call (Sonnet, single call per day).
+
+Sees the full day: entries, totals, goals, coach messages, 7-day history.
+Returns coachResponses, highlights, concerns, mealPlan (nullable), regimen (nullable).
+
+LLM calls: YES (one Sonnet call per day).
+"""
+
+from __future__ import annotations
+import json
+import subprocess
+import time
+from pathlib import Path
+from lib.parse_claude_json import parse_claude_json
+
+_DEFAULT_MODEL = "sonnet"
+_OUTPUT_SCHEMA = {
+    "coachResponses": "list of {id, timestamp, respondsTo: [msgId,...], text} — ONE entry per batch; replyTo: respondsTo[0] emitted for backward compat",
+    "highlights": "list of strings",
+    "concerns": "list of strings",
+    "mealPlan": "null OR {source, days: [...]}",
+    "regimen": "null OR {weeklySchedule: [...]}",
+    "plan_decision_reason": "string",
+}
+
+
+def synthesize(
+    date: str,
+    profile: dict,
+    totals: dict,
+    goals_block: dict,
+    all_entries: list,
+    coach_messages: list,
+    recent_history: list,
+    plan_triggered: bool,
+    model: str = _DEFAULT_MODEL,
+    grounding_feedback: str = "",
+    unanswered_messages: list | None = None,
+) -> dict:
+    """Run the holistic day synthesis.
+
+    Returns dict with keys:
+        coachResponses, highlights, concerns, mealPlan, regimen, plan_decision_reason
+
+    grounding_feedback: if non-empty, appended to the prompt as a correction instruction.
+    unanswered_messages: [{id, timestamp, text}, ...] — user messages with no coach reply yet.
+        When provided, the model generates ONE batched coachResponse with respondsTo: [all_ids].
+        When None, falls back to legacy per-message behavior.
+
+    On failure after retry, raises RuntimeError.
+    """
+    prompt = _build_synthesis_prompt(
+        date, profile, totals, goals_block, all_entries,
+        coach_messages, recent_history, plan_triggered,
+        unanswered_messages=unanswered_messages,
+    )
+    if grounding_feedback:
+        prompt += f"\n\nGROUNDING CORRECTION REQUIRED: {grounding_feedback}"
+
+    last_error = None
+    for attempt in range(2):
+        result = _call_claude(prompt, model)
+        if result is None:
+            last_error = "claude -p returned no output"
+            continue
+
+        violations = _validate_synthesis_schema(result)
+        if not violations:
+            return _normalize_synthesis(result)
+
+        last_error = f"schema violations: {violations}"
+        if attempt == 0:
+            prompt = prompt + f"\n\nPREVIOUS ATTEMPT SCHEMA VIOLATIONS: {violations}\nReturn a valid JSON object matching the required schema exactly."
+
+    raise RuntimeError(f"Day synthesis failed after 2 attempts: {last_error}")
+
+
+def _build_synthesis_prompt(
+    date, profile, totals, goals_block, all_entries,
+    coach_messages, recent_history, plan_triggered,
+    unanswered_messages=None,
+) -> str:
+    prefs = profile.get("preferences") or {}
+    coaching_tone = prefs.get("coachingTone") or prefs.get("coaching_tone") or {}
+
+    soul_text = _load_coach_soul()
+    tone_rules = _format_tone_rules(coaching_tone)
+    history_summary = _format_history(recent_history)
+    entries_summary = _summarize_entries(all_entries)
+    messages_str = json.dumps(coach_messages or [], ensure_ascii=False)
+    totals_str = json.dumps(totals, ensure_ascii=False)
+    goals_str = json.dumps(goals_block, ensure_ascii=False)
+
+    plan_instruction = ""
+    if plan_triggered:
+        plan_instruction = (
+            "\nPLAN TRIGGERED: Generate or refresh a 3-day meal plan and weekly workout regimen. "
+            "Set mealPlan.source = 'phase-2-processing'. Each day needs: breakfast, lunch, dinner, snack. "
+            "Each meal needs: name, calories, protein, fat, fiber, prep_time, ingredients[]."
+        )
+    else:
+        plan_instruction = "\nPLAN NOT TRIGGERED: Set mealPlan and regimen to null."
+
+    if unanswered_messages is not None:
+        unanswered_str = json.dumps(unanswered_messages, ensure_ascii=False)
+        coach_response_schema = (
+            '{"id": "coach_resp_<epoch_ms>", "timestamp": <ms epoch int>, '
+            '"respondsTo": ["<id1>", "<id2>", ...], '
+            '"text": "<coach reply, 30-400 chars, no em-dashes, no smart quotes>"}'
+        )
+        coach_response_rules = (
+            "- coachResponses: generate EXACTLY ONE entry covering all unanswered messages.\n"
+            "  respondsTo must contain ALL message ids from unansweredMessages.\n"
+            "  If messages cover different topics, address each in 1-2 sentences within one reply.\n"
+            "  If they form a stream on one topic, treat them as one question.\n"
+            "  If unansweredMessages is empty, return empty array []."
+        )
+        unanswered_section = f"\nUNANSWERED MESSAGES (generate ONE response covering all):\n{unanswered_str}\n"
+    else:
+        coach_response_schema = (
+            '{"replyTo": "<exact user message id>", '
+            '"text": "<coach reply, 30-400 chars, no em-dashes, no smart quotes>", '
+            '"timestamp": <ms epoch int>}'
+        )
+        coach_response_rules = (
+            "- coachResponses: one entry per coach message. If no messages, return empty array."
+        )
+        unanswered_section = ""
+
+    prompt = f"""You are a health coach. Analyze today's data and return ONLY a JSON object (no markdown, no extra text).
+
+COACH SOUL (your voice and character):
+{soul_text}
+
+USER TONE RULES (apply these on top of your SOUL):
+{tone_rules}
+
+=== TODAY'S DATA (the day you are analyzing) ===
+DATE: {date}
+
+TODAY'S TOTALS:
+{totals_str}
+
+GOALS STATUS:
+{goals_str}
+
+TODAY'S ENTRIES (the ONLY entries that belong to today):
+{entries_summary}
+
+COACH MESSAGES (conversation history):
+{messages_str}
+{unanswered_section}
+=== RECENT HISTORY (for TREND awareness only -- NEVER attribute these to today's macros) ===
+Each line is a one-line summary: DATE: cal=X protein=Y fiber=Z [weight=W] [key_event]
+{history_summary}
+
+=== INSTRUCTIONS ===
+- highlights, concerns, and coachResponses MUST describe TODAY'S behavior only (date: {date})
+- The entries listed in TODAY'S DATA above are the complete and authoritative list of what happened today
+- When referencing recent history, USE EXPLICIT TEMPORAL MARKERS: "yesterday's sablefish", "earlier this week", "Tuesday's workout", "last week's trend"
+- Bare references to foods or entities NOT in today's entries are FORBIDDEN -- always add a temporal marker
+- Numerical claims (calories, protein, etc.) must be supported by today's totals above
+- Never say a food was "today's" unless it appears in TODAY'S ENTRIES above
+{plan_instruction}
+
+REQUIRED OUTPUT SCHEMA (return this exact JSON structure):
+{{
+  "coachResponses": [
+    {coach_response_schema}
+  ],
+  "highlights": ["<positive observation, max 120 chars each>"],
+  "concerns": ["<actionable concern, max 120 chars each>"],
+  "mealPlan": null,
+  "regimen": null,
+  "plan_decision_reason": "<fresh-day|coach-session-preserved|not-stale|plan-requested>"
+}}
+
+RULES:
+{coach_response_rules}
+- highlights: 1-3 positive observations. Be specific (include numbers).
+- concerns: 0-2 actionable items. Skip if day looks good.
+- No em-dashes (—). No smart quotes (''""). Use plain ASCII.
+- Over-count calories when uncertain.
+- Never address user as babe, honey, sweetie, or girl.
+"""
+    return prompt
+
+
+def _load_coach_soul() -> str:
+    """Load the Coach Soul section from coach-plugin/agents/coach.md.
+
+    Extracts everything between '# Coach — Soul' and the next top-level '#' heading.
+    Falls back to a compact inline version if the file is unavailable.
+    """
+    coach_md = Path(__file__).resolve().parent.parent.parent / "coach-plugin" / "agents" / "coach.md"
+    try:
+        text = coach_md.read_text(encoding="utf-8")
+    except OSError:
+        return (
+            "You are Coach. Data-grounded, direct, never preachy. "
+            "Reference actual logs. Short and punchy. Specific numbers."
+        )
+
+    lines = text.splitlines()
+    in_soul = False
+    soul_lines: list[str] = []
+    for line in lines:
+        if line.strip() == "# Coach — Soul":
+            in_soul = True
+            soul_lines.append(line)
+            continue
+        if in_soul:
+            if line.startswith("# ") and soul_lines:
+                break
+            soul_lines.append(line)
+
+    if not soul_lines:
+        return "You are Coach. Direct, data-grounded. Reference actual logs. Specific numbers."
+    return "\n".join(soul_lines).strip()
+
+
+def _format_tone_rules(coaching_tone: dict) -> str:
+    """Format the user's coaching tone rules as a bullet list."""
+    if not coaching_tone:
+        return "- Direct and data-driven. Celebrate effort. No wellness jargon."
+    rules = coaching_tone.get("rules")
+    if isinstance(rules, list) and rules:
+        return "\n".join(f"- {r}" for r in rules)
+    return "- Direct and data-driven. Celebrate effort. No wellness jargon."
+
+
+def _format_history(recent_history: list) -> str:
+    if not recent_history:
+        return "(no recent history)"
+    lines = []
+    for day in recent_history[:7]:
+        d = day.get("date", "")
+        cal = day.get("calories", "?")
+        prot = day.get("protein", "?")
+        fiber = day.get("fiber", "?")
+        w = day.get("weight", "")
+        weight_str = f" weight={w}" if w else ""
+        lines.append(f"  {d}: cal={cal} protein={prot} fiber={fiber}{weight_str}")
+    return "\n".join(lines)
+
+
+def _summarize_entries(entries: list) -> str:
+    if not entries:
+        return "(no entries)"
+    lines = []
+    for e in entries:
+        desc = e.get("description") or e.get("notes") or e.get("type", "entry")
+        cal = e.get("calories", 0)
+        prot = e.get("protein", 0)
+        lines.append(f"  - {desc}: {cal} cal, {prot}g protein")
+    return "\n".join(lines)
+
+
+def _call_claude(prompt: str, model: str) -> dict | None:
+    model_flag = _resolve_model_flag(model)
+    quoted_prompt = prompt.replace("'", "'\\''")
+    cmd = f"claude -p '{quoted_prompt}' --output-format json --model {model_flag}"
+
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            return None
+        return parse_claude_json(result.stdout)
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return None
+
+
+def _validate_synthesis_schema(result: dict) -> list[str]:
+    violations = []
+    required = ("coachResponses", "highlights", "concerns", "plan_decision_reason")
+    for field in required:
+        if field not in result:
+            violations.append(f"missing field: {field}")
+    if "coachResponses" in result and not isinstance(result["coachResponses"], list):
+        violations.append("coachResponses must be a list")
+    if "highlights" in result and not isinstance(result["highlights"], list):
+        violations.append("highlights must be a list")
+    if "concerns" in result and not isinstance(result["concerns"], list):
+        violations.append("concerns must be a list")
+    return violations
+
+
+def _normalize_coach_responses(entries: list) -> list:
+    """Normalize each coachResponse entry to the new schema.
+
+    - Ensures respondsTo is always an array (migrates old replyTo: scalar)
+    - Emits replyTo: respondsTo[0] for backward compat with old phone clients
+    - Assigns id and timestamp if missing
+    """
+    result = []
+    for e in entries:
+        responds_to = e.get("respondsTo")
+        if not isinstance(responds_to, list):
+            reply_to = e.get("replyTo")
+            responds_to = [reply_to] if reply_to else []
+
+        ts = e.get("timestamp") or int(time.time() * 1000)
+        entry_id = e.get("id") or f"coach_resp_{ts}"
+
+        normalized = {
+            "id": entry_id,
+            "timestamp": ts,
+            "respondsTo": responds_to,
+            "text": e.get("text", ""),
+        }
+        # Backward compat: emit replyTo for first id so old clients still match
+        if responds_to:
+            normalized["replyTo"] = responds_to[0]
+
+        result.append(normalized)
+    return result
+
+
+def _normalize_synthesis(result: dict) -> dict:
+    return {
+        "coachResponses": _normalize_coach_responses(result.get("coachResponses") or []),
+        "highlights": result.get("highlights") or [],
+        "concerns": result.get("concerns") or [],
+        "mealPlan": result.get("mealPlan"),
+        "regimen": result.get("regimen"),
+        "plan_decision_reason": result.get("plan_decision_reason", ""),
+    }
+
+
+def _resolve_model_flag(model: str) -> str:
+    _MODEL_MAP = {
+        "haiku":  "claude-haiku-4-5-20251001",
+        "sonnet": "claude-sonnet-4-6",
+        "opus":   "claude-opus-4-7",
+    }
+    return _MODEL_MAP.get(model.lower(), model)

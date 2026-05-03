@@ -70,3 +70,13 @@ coach/profile/current-stats.json
 
 # Generated icons (keep SVG source, ignore generated PNGs if any)
 processing/scripts/__pycache__/
+
+# Python bytecode (anywhere)
+__pycache__/
+*.pyc
+
+# Test sandbox (ephemeral QA artifacts, screenshots, reports)
+processing/tests/sandbox/
+
+# Playwright MCP runtime
+.playwright-mcp/

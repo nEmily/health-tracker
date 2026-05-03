@@ -1,17 +1,26 @@
 # Health Tracker Watcher — polls relay for pending data, runs processing if found
 # Runs every 30 min via Task Scheduler. Quiet hours: midnight-8am.
 
-# Data dir: auto-detect based on script location
-# If deployed to <data>/processing/ (normal users), parent has profile/
-# If in repo at <repo>/coach-plugin/scripts/ (dev), ../../coach has profile/
-$parentDir = Split-Path $PSScriptRoot
-if (Test-Path (Join-Path $parentDir 'profile')) {
-    $dataDir = $parentDir
-} elseif (Test-Path (Join-Path (Split-Path $parentDir) 'coach' 'profile')) {
-    $dataDir = Join-Path (Split-Path $parentDir) 'coach'
+param(
+    [switch]$DryRun,
+    [string]$DataDir
+)
+
+# Data dir: override via -DataDir parameter, or auto-detect based on script location
+if ($DataDir) {
+    $dataDir = $DataDir
 } else {
-    Write-Error "Cannot find coach data directory."
-    exit 1
+    # If deployed to <data>/processing/ (normal users), parent has profile/
+    # If in repo at <repo>/coach-plugin/scripts/ (dev), ../../coach has profile/
+    $parentDir = Split-Path $PSScriptRoot
+    if (Test-Path (Join-Path $parentDir 'profile')) {
+        $dataDir = $parentDir
+    } elseif (Test-Path (Join-Path (Split-Path $parentDir) 'coach' 'profile')) {
+        $dataDir = Join-Path (Split-Path $parentDir) 'coach'
+    } else {
+        Write-Error "Cannot find coach data directory."
+        exit 1
+    }
 }
 $logDir = "$dataDir\logs"
 if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
@@ -136,19 +145,34 @@ try {
             }
             if ($needUpload) {
                 $adate = $_.BaseName
-                try {
-                    $resp = Invoke-RestMethod -Uri "$syncUrl/sync/$syncKey/day/$adate/done" -Method Post -ContentType 'application/json; charset=utf-8' -InFile $_.FullName -TimeoutSec 30
-                    if ($resp.ok) {
-                        Get-Date | Out-File $marker -Encoding ascii
-                        $uploadCount++
-                        Log "[watcher] Uploaded analysis for $adate"
+                if ($DryRun) {
+                    $sandboxDir = "$dataDir\sandbox"
+                    if (!(Test-Path $sandboxDir)) { New-Item -ItemType Directory -Path $sandboxDir -Force | Out-Null }
+                    $epoch = [long](([datetime]::UtcNow - [datetime]'1970-01-01').TotalSeconds)
+                    $dryrunPath = "$sandboxDir\dryrun-$adate-$epoch.json"
+                    Copy-Item $_.FullName $dryrunPath -Force
+                    $uploadCount++
+                    Log "[watcher] DRYRUN: would upload $adate -> $dryrunPath"
+                } else {
+                    try {
+                        $resp = Invoke-RestMethod -Uri "$syncUrl/sync/$syncKey/day/$adate/done" -Method Post -ContentType 'application/json; charset=utf-8' -InFile $_.FullName -TimeoutSec 30
+                        if ($resp.ok) {
+                            Get-Date | Out-File $marker -Encoding ascii
+                            $uploadCount++
+                            Log "[watcher] Uploaded analysis for $adate"
+                        }
+                    } catch {
+                        Log "[watcher] Upload failed for $adate : $_"
                     }
-                } catch {
-                    Log "[watcher] Upload failed for $adate : $_"
                 }
             }
         }
-        if ($uploadCount -gt 0) { Log "[watcher] Uploaded $uploadCount analysis file(s) via fallback." }
+        if ($DryRun) {
+            $sandboxPath = "$dataDir\sandbox"
+            Log "DRYRUN: would-have-uploaded $uploadCount analysis file(s), see $sandboxPath"
+        } elseif ($uploadCount -gt 0) {
+            Log "[watcher] Uploaded $uploadCount analysis file(s) via fallback."
+        }
     } finally {
         if (Test-Path $lockFile) { Remove-Item $lockFile -Force }
     }

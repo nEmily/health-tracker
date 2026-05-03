@@ -145,15 +145,35 @@ fi
 if [ "$SKIP_PHASE1" = "0" ]; then
 echo "[$TODAY] Processing $ZIP_COUNT new days of data..."
 
-# --- Run Claude Code to process extracted data ---
-echo "[$TODAY] Running Claude Code analysis..."
-CLAUDECODE="" claude -p "Process the health data that has been extracted to $EXTRACT_DIR. Today is $TODAY. The data root is $DATA_DIR. Follow the instructions in $REPO_DIR/processing/process-day-prompt.md. There may be data from multiple days - process each day found." \
-    --model sonnet \
-    --dangerously-skip-permissions \
-    --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" \
-    >> "$DATA_DIR/logs/$TODAY.log" 2>&1 || echo "[$TODAY] WARNING: Claude Code exited with an error. Check log: $DATA_DIR/logs/$TODAY.log"
+# --- Phase 1: orchestrator (default) or monolith fallback (rollback) ---
+# PROCESS_DAY_USE_ORCHESTRATOR=0 reverts to the legacy 449-line-monolith path.
+# Default is the orchestrator. After 7 days of green side-by-side runs the
+# fallback should be deleted entirely (per plan Part 6 deletion table).
+USE_ORCHESTRATOR="${PROCESS_DAY_USE_ORCHESTRATOR:-1}"
 
-echo "[$TODAY] Claude Code analysis complete."
+if [ "$USE_ORCHESTRATOR" = "1" ]; then
+    echo "[$TODAY] Running orchestrator (process_day.py)..."
+    # Process each new date through the orchestrator. NEW_DATES was populated above.
+    for DATE in "${NEW_DATES[@]+"${NEW_DATES[@]}"}"; do
+        echo "[$TODAY] Orchestrator: processing $DATE"
+        python "$REPO_DIR/processing/process_day.py" \
+            --date "$DATE" \
+            --data-dir "$DATA_DIR" \
+            --extract-dir "$EXTRACT_DIR" \
+            --backup-dir "$BACKUP_DIR" \
+            >> "$DATA_DIR/logs/$TODAY.log" 2>&1 \
+            || echo "[$TODAY] WARNING: orchestrator failed for $DATE. Check log: $DATA_DIR/logs/$TODAY.log"
+    done
+    echo "[$TODAY] Orchestrator complete."
+else
+    echo "[$TODAY] Running legacy monolith Claude Code analysis (rollback mode)..."
+    CLAUDECODE="" claude -p "Process the health data that has been extracted to $EXTRACT_DIR. Today is $TODAY. The data root is $DATA_DIR. Follow the instructions in $REPO_DIR/processing/process-day-prompt.md. There may be data from multiple days - process each day found." \
+        --model sonnet \
+        --dangerously-skip-permissions \
+        --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" \
+        >> "$DATA_DIR/logs/$TODAY.log" 2>&1 || echo "[$TODAY] WARNING: Claude Code exited with an error. Check log: $DATA_DIR/logs/$TODAY.log"
+    echo "[$TODAY] Monolith analysis complete."
+fi
 
 # --- Backup analysis and corrections ---
 echo "[$TODAY] Backing up analysis and corrections..."

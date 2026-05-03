@@ -154,7 +154,13 @@ Canonical output written to `analysis/YYYY-MM-DD.json` by processing. Do not han
   "concerns": ["..."],
   "streaks": { "tracking": 0, "calorie_goal": 0, "protein_goal": 0 },
   "coachResponses": [
-    { "replyTo": "coach_msgid", "text": "Response to user's question", "timestamp": 0 }
+    {
+      "id": "coach_resp_<epoch_ms>",
+      "timestamp": 0,
+      "respondsTo": ["coach_msgid1", "coach_msgid2"],
+      "text": "Batched response addressing all unanswered messages",
+      "replyTo": "coach_msgid1"
+    }
   ],
 
   "settingUpdates": {
@@ -172,7 +178,7 @@ Canonical output written to `analysis/YYYY-MM-DD.json` by processing. Do not han
 - `totals` — sum of all entry calories/macros including custom (alcohol) entries.
 - `goals` — comparison against targets from `profile/goals.json`.
 - `highlights` / `concerns` — forward-looking tips, not warnings about what's already done.
-- `coachResponses` — replies to inbox messages. `replyTo` must match the user message `id`.
+- `coachResponses` — replies to inbox messages. Each entry has `respondsTo: [id1, id2, ...]` (array of all message ids addressed by this response). Processing generates ONE batched response covering all unanswered messages. `replyTo: respondsTo[0]` is also emitted for backward compat with clients that only read the scalar field.
 - `settingUpdates` — when the user explicitly requests a goal or preference change.
 - `pwaProfile` — echo of `profile/pwa-profile.json` for phone restore after reinstall.
 - `supplementUpdates` — nutrition data extracted from supplement label photos.
