@@ -258,19 +258,40 @@ def _summarize_entries(entries: list) -> str:
 
 
 def _call_claude(prompt: str, model: str) -> dict | None:
+    """Invoke claude -p as a subprocess.
+
+    Why these flags:
+      --setting-sources user — skip project/local settings so this subprocess
+        does NOT inherit the coach-plugin agent pin (which would restrict tools
+        and trigger Coach startup-read behavior).
+      --dangerously-skip-permissions — non-interactive; never prompt.
+      stdin pipe — avoid Windows cmd.exe quoting hell on prompts with quotes.
+      CLAUDECODE="" env — defensive: prevent inheriting a parent value that
+        could short-circuit claude (matches what process-day.sh used to do).
+    """
+    import os
     model_flag = _resolve_model_flag(model)
-    quoted_prompt = prompt.replace("'", "'\\''")
-    cmd = f"claude -p '{quoted_prompt}' --output-format json --model {model_flag}"
+    # Use shell=True for cross-platform command resolution (claude is .cmd on Windows).
+    # Pass prompt via stdin to avoid shell quoting issues with embedded quotes/newlines.
+    cmd = (
+        f"claude -p --setting-sources user --dangerously-skip-permissions "
+        f"--output-format json --model {model_flag}"
+    )
+    env = {**os.environ, "CLAUDECODE": ""}
 
     try:
         result = subprocess.run(
             cmd,
-            shell=True,
+            input=prompt,
             capture_output=True,
             text=True,
-            timeout=120,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+            env=env,
+            shell=True,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 or not result.stdout.strip():
             return None
         return parse_claude_json(result.stdout)
     except (subprocess.TimeoutExpired, ValueError, OSError):

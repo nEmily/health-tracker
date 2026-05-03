@@ -122,28 +122,40 @@ and describe what it is.
 
 
 def _call_claude(prompt: str, model: str, photo_path: Path | None) -> dict | None:
-    """Invoke claude -p and return parsed dict, or None on subprocess/parse error."""
-    model_flag = _resolve_model_flag(model)
+    """Invoke claude -p and return parsed dict, or None on subprocess/parse error.
 
-    cmd_parts = ["claude", "-p", prompt, "--output-format", "json", "--model", model_flag]
+    Uses stdin (not shell-quoted arg) and --setting-sources user to avoid
+    inheriting the coach-plugin agent pin which would restrict tools and
+    trigger Coach startup behavior. CLAUDECODE="" defensive against parent env.
+    """
+    import os
+    model_flag = _resolve_model_flag(model)
+    # Use shell=True for cross-platform command resolution (claude is .cmd on Windows).
+    # Pass prompt via stdin to avoid shell quoting issues with embedded quotes/newlines.
+    cmd = (
+        f"claude -p --setting-sources user --dangerously-skip-permissions "
+        f"--output-format json --model {model_flag}"
+    )
+    env = {**os.environ, "CLAUDECODE": ""}
 
     if photo_path and photo_path.exists():
-        # Pass the photo as an attachment via --file flag if supported
-        # claude -p currently does not have a --file flag for photos — embed path in prompt
-        # (the prompt already mentions the filename; actual image analysis requires the API)
+        # claude -p currently does not have a --file flag for photos — the prompt
+        # already mentions the filename; actual image analysis requires the API.
         pass
-
-    cmd = " ".join(_shell_quote(p) for p in cmd_parts)
 
     try:
         result = subprocess.run(
             cmd,
-            shell=True,
+            input=prompt,
             capture_output=True,
             text=True,
-            timeout=90,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            env=env,
+            shell=True,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 or not result.stdout.strip():
             return None
         return parse_claude_json(result.stdout)
     except (subprocess.TimeoutExpired, ValueError, OSError):
