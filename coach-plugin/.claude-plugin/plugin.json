@@ -1,6 +1,6 @@
 {
   "name": "coach",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "AI health coach -- food photo analysis, calorie tracking, workout plans, meal planning",
   "author": { "name": "nEmily" },
   "repository": "https://github.com/nEmily/health-tracker"

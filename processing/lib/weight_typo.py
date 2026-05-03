@@ -1,5 +1,5 @@
 """
-weight_typo.py — Detect obvious weight-entry typos from process-day-prompt.md rules.
+weight_typo.py — Detect obvious weight-entry typos.
 
 Rules implemented:
   1. Missing decimal: value is ~10x larger than recent median (e.g. 1012 entered instead of 101.2)
