@@ -21,7 +21,6 @@ from lib.reconcile_entries import reconcile
 from lib.fiber_split import estimate_split_inplace
 from lib.compute_totals import compute as compute_totals
 from lib.validate_schema import validate as validate_schema
-from lib.tone_validator import validate as tone_validate
 from lib.parse_claude_json import parse_claude_json
 
 
@@ -315,27 +314,6 @@ class TestValidateSchemaAdversarial:
         # This violation must NOT appear
         meal_violations = [v for v in violations if "ingredient" in v.lower()]
         assert meal_violations == []
-
-
-# ── tone_validator ────────────────────────────────────────────────────────────
-
-class TestToneValidatorAdversarial:
-
-    def test_empty_string_length_violation_but_ok_true(self):
-        result = tone_validate("")
-        assert result["ok"] is True
-        assert any("short" in v.lower() or "30" in v for v in result["violations"])
-
-    def test_10000_char_rant_no_banned_phrase_ok_true(self):
-        text = "You did " + "really well today. " * 500  # ~10000 chars, no banned phrases
-        result = tone_validate(text)
-        assert result["ok"] is True
-        assert any("long" in v.lower() or "500" in v for v in result["violations"])
-
-    def test_banned_phrase_case_insensitive(self):
-        result = tone_validate("TRUST THE PROCESS and keep going!")
-        assert result["ok"] is False
-        assert any("trust the process" in v.lower() for v in result["violations"])
 
 
 # ── parse_claude_json ─────────────────────────────────────────────────────────

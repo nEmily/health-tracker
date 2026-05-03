@@ -39,7 +39,6 @@ from lib.data_grounding import validate_grounding
 from lib.build_pwa_profile_echo import build as build_pwa_profile_echo
 from lib.validate_schema import validate as validate_schema
 from lib.append_conversations import append as append_conversations
-from lib import tone_validator
 
 # Set COACH_STUB_LLM=1 to bypass all LLM calls (for tests/dry runs without claude CLI)
 _STUB_LLM = os.environ.get("COACH_STUB_LLM") == "1"
@@ -163,9 +162,6 @@ def main(
         recent_history=recent_history,
         goals_block=goals_block,
     )
-
-    # ── TONE VALIDATION ───────────────────────────────────────────────────────
-    _run_tone_validation(synthesis["coachResponses"])
 
     # ── ASSEMBLE OUTPUT ───────────────────────────────────────────────────────
     output = _assemble_analysis(
@@ -452,15 +448,6 @@ def _strip_grounding_violations(synthesis: dict, violations: list[str]) -> dict:
         for resp in synthesis.get("coachResponses") or []
     ]
     return result
-
-
-def _run_tone_validation(coach_responses: list[dict]) -> None:
-    """Validate tone on all coach responses. Print warnings but don't exit."""
-    for resp in coach_responses:
-        text = resp.get("text", "")
-        result = tone_validator.validate(text)
-        if not result["ok"]:
-            print(f"[process_day] TONE WARNING: {result['violations']}", flush=True)
 
 
 def _assemble_analysis(

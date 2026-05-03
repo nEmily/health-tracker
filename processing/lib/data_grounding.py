@@ -31,11 +31,6 @@ _TEMPORAL_PATTERNS: list[re.Pattern] = [
     re.compile(r'\b\d+\s+days?\s+ago\b', re.IGNORECASE),
 ]
 
-_NUMERICAL_PATTERN = re.compile(
-    r'\b(\d+(?:\.\d+)?)\s*(g|cal|oz|lbs|kcal|calories|grams)\b',
-    re.IGNORECASE,
-)
-
 
 def validate_grounding(
     synthesis_output: dict,
@@ -58,7 +53,6 @@ def validate_grounding(
     texts_to_check = _extract_texts(synthesis_output)
 
     violations: list[str] = []
-    warnings: list[str] = []
 
     for text in texts_to_check:
         text_lower = text.lower()
@@ -75,22 +69,12 @@ def validate_grounding(
                 f"'{entity}' referenced without temporal marker and not in today's entries"
             )
 
-    # Numerical grounding — warnings only, never fail
-    for text in texts_to_check:
-        for match in _NUMERICAL_PATTERN.finditer(text):
-            number = float(match.group(1))
-            unit = match.group(2).lower()
-            if not _number_grounded(number, unit, today_totals, today_entries):
-                warnings.append(
-                    f"Numerical claim {match.group(0)!r} not found in today's totals/entries (±5%)"
-                )
-
     retry_feedback = _build_retry_feedback(violations)
 
     return {
         "ok": len(violations) == 0,
         "violations": violations,
-        "warnings": warnings,
+        "warnings": [],
         "suggested_retry_feedback": retry_feedback,
     }
 
@@ -159,30 +143,6 @@ def _has_temporal_marker_near(text: str, entity: str) -> bool:
             if pattern.search(context):
                 return True
         idx = text_lower.find(entity_lower, idx + 1)
-    return False
-
-
-def _number_grounded(
-    number: float,
-    unit: str,
-    today_totals: dict,
-    today_entries: list,
-) -> bool:
-    """Return True if number appears in today's totals or entry macros (±5%)."""
-    tolerance = 0.05
-
-    for val in today_totals.values():
-        if isinstance(val, (int, float)) and float(val) != 0:
-            if abs(number - float(val)) / float(val) <= tolerance:
-                return True
-
-    for entry in today_entries:
-        for key in ("calories", "protein", "fat", "fiber", "carbs", "value"):
-            val = entry.get(key)
-            if isinstance(val, (int, float)) and float(val) != 0:
-                if abs(number - float(val)) / float(val) <= tolerance:
-                    return True
-
     return False
 
 

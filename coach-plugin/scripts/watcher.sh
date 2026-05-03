@@ -74,3 +74,16 @@ echo "[watcher] Pending dates: $PENDING. Launching processing..."
 PROCESS_SCRIPT="$SCRIPT_DIR/process-day.sh"
 CLAUDECODE="" bash "$PROCESS_SCRIPT"
 echo "[watcher] Processing finished."
+
+# Backlog check — catch up stale historical dates (cap 5 per tick)
+REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+CHECK_BACKLOG="$REPO_ROOT/tools/check-backlog.py"
+REPROCESS_BACKLOG="$REPO_ROOT/tools/reprocess-backlog.py"
+if [ -f "$CHECK_BACKLOG" ]; then
+    STALE_COUNT=$(python3 "$CHECK_BACKLOG" --data-dir "$DATA_DIR" --quiet 2>/dev/null || echo 0)
+    if [ "$STALE_COUNT" -gt 0 ] 2>/dev/null; then
+        echo "[watcher] Backlog: $STALE_COUNT stale date(s). Reprocessing up to 5..."
+        python3 "$REPROCESS_BACKLOG" --data-dir "$DATA_DIR" --limit 5 2>&1 || \
+            echo "[watcher] Backlog reprocess failed (non-fatal)."
+    fi
+fi

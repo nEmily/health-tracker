@@ -161,3 +161,15 @@ echo "[watcher] Processing finished."
 # Scan only the new log content from this run — prior runs today may have logged
 # rate-limit strings that would otherwise trigger false positives.
 check_rate_limit "$LOG_OFFSET_BEFORE"
+
+# Backlog check — catch up stale historical dates (cap 5 per tick)
+CHECK_BACKLOG="$SCRIPT_DIR/../tools/check-backlog.py"
+REPROCESS_BACKLOG="$SCRIPT_DIR/../tools/reprocess-backlog.py"
+if [ -f "$CHECK_BACKLOG" ]; then
+    STALE_COUNT=$(python3 "$CHECK_BACKLOG" --data-dir "$DATA_DIR" --quiet 2>/dev/null || echo 0)
+    if [ "$STALE_COUNT" -gt 0 ] 2>/dev/null; then
+        echo "[watcher] Backlog: $STALE_COUNT stale date(s). Reprocessing up to 5..."
+        python3 "$REPROCESS_BACKLOG" --data-dir "$DATA_DIR" --limit 5 2>&1 || \
+            echo "[watcher] Backlog reprocess failed (non-fatal)."
+    fi
+fi
