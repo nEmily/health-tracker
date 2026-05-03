@@ -127,7 +127,7 @@ Get-Content "logs\$(Get-Date -Format yyyy-MM-dd).log" -Wait
 
 **"No pending data on cloud relay"** — normal if no new data has been uploaded from your phone. Log something in the app and tap Sync, then run processing again.
 
-**Claude Code exits with error** — check the log file. Common causes: Claude isn't authenticated (`claude login`), or the prompt file is missing (`processing/process-day-prompt.md`).
+**Orchestrator exits with error** — check the log file. Common causes: Python not on PATH, or `python processing/process_day.py` failed (look for a traceback in the log).
 
 **Analysis not appearing on phone** — open the app, go to Settings → Cloud Sync → Check for Results.
 
@@ -144,7 +144,7 @@ claude
 # Or for a specific date: /process-day 2026-03-15
 ```
 
-The skill reads `processing/process-day-prompt.md` for all processing rules. It handles downloading from the relay, analyzing photos, estimating calories, generating meal plans and workout regimen, and uploading results back.
+The skill runs `python processing/process_day.py` which handles downloading from the relay, analyzing photos, estimating calories, generating meal plans and workout regimen, and uploading results back.
 
 ---
 

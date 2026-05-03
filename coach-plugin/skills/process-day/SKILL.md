@@ -58,38 +58,30 @@ Print: `Downloaded {N} day(s) from relay: {dates}` or `No pending data on relay`
 
 If nothing was downloaded, check if `$EXTRACT_DIR/daily/` has any date folders without corresponding analysis files. If yes, those need processing. If no new downloads AND no unprocessed local data, skip to Step 5 (Phase 2 check).
 
-### Step 4: Phase 1 -- Food & entry analysis
+### Step 4: Run orchestrator
 
-This is the core analysis step. Read `${CLAUDE_PLUGIN_ROOT}/scripts/process-day-prompt.md` and follow every instruction in it exactly.
+Run the Python orchestrator for the date being processed:
 
-Key inputs:
-- Extracted data at `$EXTRACT_DIR` (log.json, photos, profile)
-- Profile files at `$DATA_DIR/profile/` (goals, preferences, regimen, bio)
-- Corrections at `$DATA_DIR/corrections/{DATE}.json`
+```bash
+python "$REPO_DIR/processing/process_day.py" \
+    --date "$DATE" \
+    --data-dir "$DATA_DIR" \
+    --extract-dir "$EXTRACT_DIR" \
+    --backup-dir "$BACKUP_DIR"
+```
+
+Where `$REPO_DIR` is the health-tracker repo root (the parent of `processing/`). The orchestrator handles all analysis: entry-level food analysis, totals, goals, highlights, meal plan generation, and regimen updates.
 
 Key output:
-- Write analysis JSON to `$DATA_DIR/analysis/{DATE}.json`
+- Writes analysis JSON to `$DATA_DIR/analysis/{DATE}.json`
 
-After analysis, back up: copy analysis files to `$BACKUP_DIR/analysis/`.
+After the orchestrator completes, back up: copy analysis files to `$BACKUP_DIR/analysis/`.
 
-Print: `Phase 1 complete -- analyzed {N} entries for {DATE}`
+Print: `Processing complete for {DATE}`
 
-### Step 5: Phase 2 -- Plan generation (conditional)
+### Step 5: Upload check
 
-Phase 2 adds `mealPlan` and `regimen` to the analysis JSON. It runs when ANY of these triggers fire:
-
-1. **First run of the day** -- no analysis existed before this run
-2. **Goals/preferences changed** -- hash of goals.json + preferences.json differs from `$DATA_DIR/last-plan-hash.txt`
-3. **Plan requested or stale** -- `_planRequested` or `_planStale` is true in the analysis JSON
-4. **Plan too old** -- `$DATA_DIR/last-plan-generation.txt` is >12 hours old or missing
-
-If no triggers fire, print `Phase 2 skipped -- plan is current` and move on.
-
-If triggered: read `${CLAUDE_PLUGIN_ROOT}/scripts/plan-prompt.md` and follow every instruction in it. Add `mealPlan` and `regimen` to the existing analysis JSON without modifying any other fields.
-
-After generation, update `$DATA_DIR/last-plan-generation.txt` (current ISO timestamp) and `$DATA_DIR/last-plan-hash.txt` (current hash).
-
-Print: `Phase 2 complete -- meal plan + regimen updated` or the skip message.
+The orchestrator writes the analysis file. Proceed to Step 6 (upload).
 
 ### Step 6: Upload results to relay
 

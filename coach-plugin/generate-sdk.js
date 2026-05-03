@@ -192,29 +192,53 @@ function extractScoring() {
   return md;
 }
 
-// --- Section 4: Extract analysis JSON format from process-day-prompt.md ---
+// --- Section 4: Analysis JSON format (schema inlined from orchestrator output contract) ---
 
 function extractAnalysisFormat() {
-  const promptPath = path.join(ROOT, 'processing', 'process-day-prompt.md');
-  // Normalize line endings so regex works on Windows-formatted files
-  const src = fs.readFileSync(promptPath, 'utf8').replace(/\r\n/g, '\n');
-
-  // Find the fenced code block showing the analysis JSON shape (under "## Output")
-  const outputIdx = src.indexOf('## Output');
-  if (outputIdx === -1) {
-    process.stderr.write('generate-sdk.js: could not find "## Output" section in process-day-prompt.md\n');
-    return `## Analysis JSON Format\n\n_Could not extract JSON schema from process-day-prompt.md (missing "## Output" heading)_\n\n---\n\n`;
-  }
-  const outputSection = src.slice(outputIdx);
-  const fenceMatch = outputSection.match(/```json\n([\s\S]*?)```/);
+  const SCHEMA = `{
+  "date": "YYYY-MM-DD",
+  "entries": [
+    {
+      "id": "entry_id_from_log",
+      "type": "meal|snack|drink|workout",
+      "subtype": "breakfast|lunch|dinner|null",
+      "description": "detailed text description of the food/activity",
+      "calories": 0,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 0,
+      "fiber": 0,
+      "solubleFiber": 0,
+      "insolubleFiber": 0,
+      "confidence": "high|medium|low",
+      "breakdown": { "item_name": { "cal": 0, "p": 0, "c": 0, "f": 0 } }
+    }
+  ],
+  "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "solubleFiber": 0, "insolubleFiber": 0 },
+  "goals": {
+    "calories": { "target": 0, "actual": 0, "remaining": 0, "status": "under|over|on_track" },
+    "protein": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high" },
+    "carbs": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
+    "fat": { "target": 0, "actual": 0, "remaining": 0, "status": "..." },
+    "fiber": { "target": 0, "actual": 0, "remaining": 0, "status": "low|on_track|high", "soluble_actual": 0, "insoluble_actual": 0 },
+    "water": { "target_oz": 0, "actual_oz": 0, "status": "..." }
+  },
+  "highlights": ["..."],
+  "concerns": ["..."],
+  "streaks": { "tracking": 0, "calorie_goal": 0, "protein_goal": 0 },
+  "coachResponses": [
+    { "replyTo": "coach_msgid", "text": "Response to user's question", "timestamp": 0 }
+  ],
+  "settingUpdates": {
+    "goals": { "calories": 1100 },
+    "preferences": { "mealsPerDay": 2 }
+  },
+  "pwaProfile": {}
+}
+`;
 
   let md = `## Analysis JSON Format\n\nCanonical output written to \`analysis/YYYY-MM-DD.json\` by processing. Do not hand-edit — use \`corrections/YYYY-MM-DD.json\` for overrides.\n\n`;
-
-  if (fenceMatch) {
-    md += '```json\n' + fenceMatch[1] + '```\n';
-  } else {
-    md += '_Could not extract JSON schema from process-day-prompt.md_\n';
-  }
+  md += '```json\n' + SCHEMA + '```\n';
 
   md += `\n### Field Notes\n\n`;
   md += `- \`entries\` — analyzed entries (meals, workouts, custom). Body/face photos are omitted.\n`;

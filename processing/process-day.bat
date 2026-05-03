@@ -57,11 +57,6 @@ mkdir "%BACKUP_DIR%\corrections" 2>nul
 set EXTRACT_DIR=%DATA_DIR%\incoming\extracted
 mkdir "%EXTRACT_DIR%" 2>nul
 
-REM --- Detect first run of today (checked before Phase 1) ---
-set PHASE2_FIRST_RUN=0
-if not exist "%DATA_DIR%\analysis\%TODAY%.json" set PHASE2_FIRST_RUN=1
-
-REM PHASE2_FIRST_RUN is set true only when no analysis file exists at all for today
 set ZIP_COUNT=0
 set NEW_DATES=
 
@@ -109,7 +104,7 @@ if not "!RELAY_DATES!"=="" (
     REM uploads new data; Phase 1 will MERGE the new log.json with the existing
     REM analysis (preserving photo analyses keyed by entry id). Do NOT delete the
     REM existing analysis file here -- re-analyzing photos causes calorie
-    REM fluctuation on every sync. See process-day-prompt.md "Entry-Level Stability".
+    REM fluctuation on every sync. Preserving existing analysis avoids re-analyzing photos already processed.
     for %%d in (!RELAY_DATES!) do (
         echo [%TODAY%] Downloading %%d from relay...
         curl -sf -o "%EXTRACT_DIR%\health-%%d.zip" "%HEALTH_SYNC_URL%/sync/%HEALTH_SYNC_KEY%/day/%%d"
@@ -151,9 +146,6 @@ if not "!RELAY_DATES!"=="" (
     echo [%TODAY%] No pending data on cloud relay.
 )
 
-REM Re-check PHASE2_FIRST_RUN in case today's analysis was absent before downloads
-if not exist "%DATA_DIR%\analysis\%TODAY%.json" set PHASE2_FIRST_RUN=1
-
 :check_local
 if !ZIP_COUNT! equ 0 (
     REM No new downloads, but check if extracted data exists with missing analysis
@@ -187,27 +179,14 @@ if not "!RECONCILE_DATES!"=="" (
     echo [%TODAY%] Reconcile markers found for:!RECONCILE_DATES! >>"%DATA_DIR%\logs\%TODAY%.log"
 )
 
-REM --- Phase 1: orchestrator (default) or monolith fallback ---
-REM Set PROCESS_DAY_USE_ORCHESTRATOR=0 to revert to the legacy monolith path.
-if "%PROCESS_DAY_USE_ORCHESTRATOR%"=="" set PROCESS_DAY_USE_ORCHESTRATOR=1
-
-if "%PROCESS_DAY_USE_ORCHESTRATOR%"=="1" (
-    echo [%TODAY%] Running orchestrator process_day.py...
-    REM Iterate NEW_DATES (space-separated). Process each date through the Python orchestrator.
-    for %%D in (!NEW_DATES!) do (
-        echo [%TODAY%] Orchestrator: processing %%D >>"%DATA_DIR%\logs\%TODAY%.log"
-        python "%REPO_DIR%\processing\process_day.py" --date %%D --data-dir "%DATA_DIR%" --extract-dir "%EXTRACT_DIR%" --backup-dir "%BACKUP_DIR%" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
-        if errorlevel 1 echo [%TODAY%] WARNING: orchestrator failed for %%D >>"%DATA_DIR%\logs\%TODAY%.log"
-    )
-    echo MARKER:orchestrator-done >>"%DATA_DIR%\logs\%TODAY%.log"
-) else (
-    echo [%TODAY%] Running legacy monolith Claude Code analysis rollback mode...
-    call claude -p "Process the health data that has been extracted to %EXTRACT_DIR%. Today is %TODAY%. The data root is %DATA_DIR%. Follow the instructions in %REPO_DIR%\processing\process-day-prompt.md. There may be data from multiple days - process each day found. RECONCILE_DATES (fresh relay download this pass, run mandatory entry reconciliation for these dates even if analysis already exists):!RECONCILE_DATES!" --model sonnet --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
-    echo MARKER:claude-done >>"%DATA_DIR%\logs\%TODAY%.log"
-    if errorlevel 1 (
-        echo [%TODAY%] WARNING: Claude Code exited with an error. >>"%DATA_DIR%\logs\%TODAY%.log"
-    )
+REM --- Phase 1: Run orchestrator ---
+echo [%TODAY%] Running orchestrator process_day.py...
+for %%D in (!NEW_DATES!) do (
+    echo [%TODAY%] Orchestrator: processing %%D >>"%DATA_DIR%\logs\%TODAY%.log"
+    python "%REPO_DIR%\processing\process_day.py" --date %%D --data-dir "%DATA_DIR%" --extract-dir "%EXTRACT_DIR%" --backup-dir "%BACKUP_DIR%" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
+    if errorlevel 1 echo [%TODAY%] WARNING: orchestrator failed for %%D >>"%DATA_DIR%\logs\%TODAY%.log"
 )
+echo MARKER:orchestrator-done >>"%DATA_DIR%\logs\%TODAY%.log"
 
 REM --- Delete reconcile markers now that Phase 1 has run ---
 for %%f in ("%DATA_DIR%\analysis\????-??-??.json.reconcile") do (
@@ -223,78 +202,6 @@ REM --- Backup analysis and corrections locally ---
 echo [%TODAY%] Backing up analysis and corrections... >>"%DATA_DIR%\logs\%TODAY%.log"
 xcopy "%DATA_DIR%\analysis\*.json" "%BACKUP_DIR%\analysis\" /Y /Q >nul 2>&1
 xcopy "%DATA_DIR%\corrections\*.json" "%BACKUP_DIR%\corrections\" /Y /Q >nul 2>&1
-
-REM --- Phase 2: Conditional plan generation ---
-set RUN_PHASE2=0
-
-REM Trigger 1: First processing run of the day
-if "!PHASE2_FIRST_RUN!"=="1" (
-    set RUN_PHASE2=1
-    echo [%TODAY%] Phase 2 trigger: first run of the day. >>"%DATA_DIR%\logs\%TODAY%.log"
-)
-
-REM Trigger 2: Goals or preferences changed (hash comparison)
-set GOALS_HASH_PATH=%DATA_DIR%\profile\goals.json
-set PREFS_HASH_PATH=%DATA_DIR%\profile\preferences.json
-if exist "%EXTRACT_DIR%\profile\goals.json" set GOALS_HASH_PATH=%EXTRACT_DIR%\profile\goals.json
-if exist "%EXTRACT_DIR%\profile\preferences.json" set PREFS_HASH_PATH=%EXTRACT_DIR%\profile\preferences.json
-
-for /f "usebackq delims=" %%h in (`powershell -NoProfile -Command "$c = ''; if (Test-Path '%GOALS_HASH_PATH%') { $c += Get-Content -Raw '%GOALS_HASH_PATH%' }; if (Test-Path '%PREFS_HASH_PATH%') { $c += Get-Content -Raw '%PREFS_HASH_PATH%' }; $b = [System.Text.Encoding]::UTF8.GetBytes($c); $h = [System.Security.Cryptography.SHA256]::Create().ComputeHash($b); [System.BitConverter]::ToString($h).Replace('-','').ToLower()"`) do set CURRENT_HASH=%%h
-
-set STORED_HASH=
-if exist "%DATA_DIR%\last-plan-hash.txt" (
-    for /f "usebackq delims=" %%s in ("%DATA_DIR%\last-plan-hash.txt") do set STORED_HASH=%%s
-)
-if not "!CURRENT_HASH!"=="!STORED_HASH!" (
-    if "!RUN_PHASE2!"=="0" echo [%TODAY%] Phase 2 trigger: goals/preferences changed. >>"%DATA_DIR%\logs\%TODAY%.log"
-    set RUN_PHASE2=1
-)
-
-REM Trigger 3: User requested plan update or plan is stale due to intake/workout deviation
-if exist "%DATA_DIR%\analysis\%TODAY%.json" (
-    for /f "usebackq delims=" %%r in (`powershell -NoProfile -Command "try { $j = ConvertFrom-Json (Get-Content -Raw '%DATA_DIR%\analysis\%TODAY%.json'); if ($j._planRequested -eq $true -or $j._planStale -eq $true) { 'yes' } else { 'no' } } catch { 'no' }"`) do set PLAN_TRIGGER=%%r
-    if "!PLAN_TRIGGER!"=="yes" (
-        if "!RUN_PHASE2!"=="0" echo [%TODAY%] Phase 2 trigger: plan requested or stale. >>"%DATA_DIR%\logs\%TODAY%.log"
-        set RUN_PHASE2=1
-    )
-)
-
-REM Trigger 4: Last plan generation was >12 hours ago or missing
-set PLAN_TOO_OLD=1
-if exist "%DATA_DIR%\last-plan-generation.txt" (
-    for /f "usebackq delims=" %%t in (`powershell -NoProfile -Command "try { $last = [datetime]::Parse((Get-Content '%DATA_DIR%\last-plan-generation.txt' -Raw).Trim()); if (((Get-Date) - $last).TotalHours -lt 12) { 'fresh' } else { 'stale' } } catch { 'stale' }"`) do set PLAN_AGE=%%t
-    if "!PLAN_AGE!"=="fresh" set PLAN_TOO_OLD=0
-)
-if "!PLAN_TOO_OLD!"=="1" (
-    if "!RUN_PHASE2!"=="0" echo [%TODAY%] Phase 2 trigger: plan older than 12 hours or missing. >>"%DATA_DIR%\logs\%TODAY%.log"
-    set RUN_PHASE2=1
-)
-
-if "!RUN_PHASE2!"=="0" (
-    echo [%TODAY%] Phase 2 skipped - plan is current. >>"%DATA_DIR%\logs\%TODAY%.log"
-    goto :upload_results
-)
-
-REM Guard: Phase 1 must have produced an analysis file
-if not exist "%DATA_DIR%\analysis\%TODAY%.json" (
-    echo [%TODAY%] Phase 2 skipped - no analysis file for today. >>"%DATA_DIR%\logs\%TODAY%.log"
-    goto :upload_results
-)
-
-REM --- Run Phase 2: Plan Generation ---
-echo [%TODAY%] Running Phase 2: plan generation... >>"%DATA_DIR%\logs\%TODAY%.log"
-call claude -p "Generate the meal plan and workout regimen for %TODAY%. The data root is %DATA_DIR%. The extracted data is at %EXTRACT_DIR%. Follow the instructions in %REPO_DIR%\processing\plan-prompt.md." --model haiku --dangerously-skip-permissions --allowed-tools "Bash Read Write Edit Glob Grep WebSearch WebFetch" >>"%DATA_DIR%\logs\%TODAY%.log" 2>&1
-set PHASE2_EXIT=!ERRORLEVEL!
-echo MARKER:phase2-done >>"%DATA_DIR%\logs\%TODAY%.log"
-if !PHASE2_EXIT! neq 0 (
-    echo [%TODAY%] WARNING: Phase 2 exited with an error. Plan may be incomplete. >>"%DATA_DIR%\logs\%TODAY%.log"
-    goto :upload_results
-)
-
-REM Phase 2 succeeded - update tracking files
-powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-ddTHH:mm:ss'" >"%DATA_DIR%\last-plan-generation.txt"
-echo !CURRENT_HASH!>"%DATA_DIR%\last-plan-hash.txt"
-echo [%TODAY%] Phase 2 complete - plan generation done. >>"%DATA_DIR%\logs\%TODAY%.log"
 
 :upload_results
 echo MARKER:upload-start >>"%DATA_DIR%\logs\%TODAY%.log"

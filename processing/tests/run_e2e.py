@@ -510,11 +510,11 @@ def _build_recent_history(data_dir: Path, anchor_date: str, n_days: int = 7) -> 
 
 
 def run_t4_token_count(quick: bool, with_llm: bool = False) -> TestResult:
-    """T4: Measure synthesis prompt size vs monolith prompt baseline.
+    """T4: Measure synthesis prompt size vs historical monolith baseline (~10k tokens).
 
     Builds the synthesis prompt from a real fixture day (2026-04-25) using
-    _build_synthesis_prompt(), counts chars/tokens, and compares to the monolith
-    process-day-prompt.md baseline (~10k tokens). PASS if synth < monolith.
+    _build_synthesis_prompt(), counts chars/tokens, and compares to the legacy
+    monolith baseline (~10k tokens). PASS if synth < baseline.
     """
     if quick:
         return TestResult("T4", "synthesis prompt size", "SKIP",
@@ -561,13 +561,8 @@ def run_t4_token_count(quick: bool, with_llm: bool = False) -> TestResult:
         synth_chars = len(prompt)
         synth_tokens = synth_chars // 4
 
-        # Monolith baseline: process-day-prompt.md at ~449 lines
-        monolith_path = _PROCESSING_DIR / "process-day-prompt.md"
-        if monolith_path.exists():
-            monolith_chars = len(monolith_path.read_text(encoding="utf-8"))
-            monolith_tokens = monolith_chars // 4
-        else:
-            monolith_tokens = 10_000  # fallback: ~449 lines * ~22 chars/word * ~10 words/line / 4
+        # Historical monolith baseline: 449-line prompt was ~10k tokens
+        monolith_tokens = 10_000
 
         elapsed = time.monotonic() - t0
         ratio = round(synth_tokens / max(monolith_tokens, 1), 2)
