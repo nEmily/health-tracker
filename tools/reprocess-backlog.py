@@ -17,7 +17,6 @@ import json
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # Entry types where LLM analysis adds nothing (zero calories by definition).
@@ -36,8 +35,8 @@ def main():
     ap.add_argument("--data-dir", default="coach")
     ap.add_argument("--extract-dir", default=None)
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--parallel", type=int, default=4,
-                    help="Max concurrent dates (default 4). Each date spawns its own claude subprocesses.")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="Cap: process at most N oldest stale dates (default: unlimited)")
     args = ap.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -53,6 +52,9 @@ def main():
     if not stale:
         print("All dates clean. Nothing to do.")
         return
+
+    if args.limit and len(stale) > args.limit:
+        stale = stale[:args.limit]
 
     print(f"{len(stale)} stale dates to reprocess:")
     for d, reason in stale:
@@ -121,9 +123,10 @@ def main():
 
     repo_root = Path(__file__).resolve().parent.parent
     process_day = repo_root / "processing" / "process_day.py"
-    stale = [(d, "") for d in full_reprocess]  # reuse downstream loop
 
-    def _run_one(date: str) -> tuple[str, str, int, str]:
+    results = []
+    t_start = time.time()
+    for i, date in enumerate(full_reprocess, 1):
         t0 = time.time()
         r = subprocess.run(
             ["python", str(process_day), "--date", date,
@@ -135,19 +138,9 @@ def main():
         ok = r.returncode == 0 and (analysis_dir / f"{date}.json").exists()
         status = "OK" if ok else "FAIL"
         last = (r.stdout.strip().splitlines() or [""])[-1][-200:]
-        return (date, status, elapsed, last)
+        results.append((date, status, elapsed))
+        print(f"[{i}/{len(full_reprocess)}] {date}: {status} in {elapsed}s  {last}", flush=True)
 
-    results = []
-    print(f"Running {len(stale)} dates with {args.parallel}-way parallelism...\n", flush=True)
-    t_start = time.time()
-    with ThreadPoolExecutor(max_workers=max(1, args.parallel)) as ex:
-        futures = {ex.submit(_run_one, date): date for date, _ in stale}
-        completed = 0
-        for fut in as_completed(futures):
-            completed += 1
-            date, status, elapsed, last = fut.result()
-            results.append((date, status, elapsed))
-            print(f"[{completed}/{len(stale)}] {date}: {status} in {elapsed}s  {last}", flush=True)
     total = int(time.time() - t_start)
     print(f"\nWall time: {total}s ({total//60}m {total%60}s)")
 

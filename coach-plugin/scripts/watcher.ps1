@@ -173,6 +173,23 @@ try {
         } elseif ($uploadCount -gt 0) {
             Log "[watcher] Uploaded $uploadCount analysis file(s) via fallback."
         }
+
+        # Backlog check — catch up stale historical dates (cap 5 per tick)
+        $repoRoot = Split-Path (Split-Path $PSScriptRoot)
+        $checkBacklog = Join-Path $repoRoot 'tools\check-backlog.py'
+        $reprocessBacklog = Join-Path $repoRoot 'tools\reprocess-backlog.py'
+        if (Test-Path $checkBacklog) {
+            try {
+                $staleCount = & python $checkBacklog --data-dir $dataDir --quiet 2>$null
+                $staleCount = [int]($staleCount -replace '\D','')
+                if ($staleCount -gt 0) {
+                    Log "[watcher] Backlog: $staleCount stale date(s). Reprocessing up to 5..."
+                    & python $reprocessBacklog --data-dir $dataDir --limit 5 2>&1 | ForEach-Object { Log $_ }
+                }
+            } catch {
+                Log "[watcher] Backlog check failed (non-fatal): $_"
+            }
+        }
     } finally {
         if (Test-Path $lockFile) { Remove-Item $lockFile -Force }
     }

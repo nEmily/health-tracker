@@ -299,6 +299,22 @@ try {
             Log "[watcher] Uploaded $uploadCount analysis file(s) via fallback."
         }
 
+        # Backlog check — catch up stale historical dates (cap 5 per tick)
+        $checkBacklog = Join-Path $PSScriptRoot '..\tools\check-backlog.py'
+        $reprocessBacklog = Join-Path $PSScriptRoot '..\tools\reprocess-backlog.py'
+        if (Test-Path $checkBacklog) {
+            try {
+                $staleCount = & python $checkBacklog --data-dir $dataDir --quiet 2>$null
+                $staleCount = [int]($staleCount -replace '\D','')
+                if ($staleCount -gt 0) {
+                    Log "[watcher] Backlog: $staleCount stale date(s). Reprocessing up to 5..."
+                    & python $reprocessBacklog --data-dir $dataDir --limit 5 2>&1 | ForEach-Object { Log $_ }
+                }
+            } catch {
+                Log "[watcher] Backlog check failed (non-fatal): $_"
+            }
+        }
+
         # Scan only the new log content this run produced. Prior runs today may
         # have logged rate-limit strings that would otherwise trigger false positives.
         Check-RateLimit -StartOffset $logOffsetBefore
