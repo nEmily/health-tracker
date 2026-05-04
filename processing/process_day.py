@@ -140,7 +140,10 @@ def main(
     recent_history = _load_recent_history(data_dir, date, days=7)
 
     # ── HOLISTIC SYNTHESIS (Sonnet, single call) ──────────────────────────────
-    all_chat = log_data.get("coachChat", [])
+    # PWA emits coachChat: null when there are no chat messages (not missing key).
+    # dict.get("k", default) returns None for an explicit null, not the default,
+    # so we need an explicit None-check, not a default arg.
+    all_chat = log_data.get("coachChat") or []
     unanswered_messages = _compute_unanswered(all_chat, existing_analysis)
     print(
         f"[process_day] Coach messages: {len(all_chat)} total, "
@@ -167,7 +170,7 @@ def main(
     synthesis = _run_grounding_validation(
         synthesis, all_entries, totals, profile, date,
         plan_triggered=plan_should_trigger,
-        coach_messages=log_data.get("coachChat", []),
+        coach_messages=(log_data.get("coachChat") or []),
         recent_history=recent_history,
         goals_block=goals_block,
     )
@@ -209,7 +212,7 @@ def main(
 
         append_conversations(
             data_dir,
-            log_data.get("coachChat", []),
+            (log_data.get("coachChat") or []),
             synthesis["coachResponses"],
         )
     else:
@@ -499,8 +502,10 @@ def _compute_unanswered(
     Returns the subset of all_chat whose id does not appear in any existing
     response's respondsTo/replyTo. Order preserved.
     """
+    if not all_chat:
+        return []
     already_responded_ids: set[str] = set()
-    for r in (existing_analysis or {}).get("coachResponses", []):
+    for r in ((existing_analysis or {}).get("coachResponses") or []):
         rt = r.get("respondsTo")
         if isinstance(rt, list):
             already_responded_ids.update(x for x in rt if x)

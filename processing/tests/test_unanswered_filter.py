@@ -106,6 +106,21 @@ def test_empty_chat_returns_empty():
     assert _compute_unanswered([], {"coachResponses": [_resp(["x"])]}) == []
 
 
+def test_none_chat_returns_empty():
+    """PWA emits coachChat: null (not missing) on days with no messages.
+    dict.get('k', []) returns None for explicit null, so callers must handle it.
+    Regression for 2026-05-04 cron failure."""
+    assert _compute_unanswered(None, None) == []
+    assert _compute_unanswered(None, {"coachResponses": [_resp(["x"])]}) == []
+
+
+def test_coachresponses_explicitly_null_in_existing():
+    """existing_analysis.coachResponses can also be None, not [], if a prior
+    run wrote nothing. Don't crash."""
+    chat = [_msg("a")]
+    assert _compute_unanswered(chat, {"coachResponses": None}) == chat
+
+
 def test_message_without_id_field_passes_through():
     """Defensive: malformed message with no id is treated as unanswered (can't dedup)."""
     chat = [{"text": "no id"}, _msg("a")]
