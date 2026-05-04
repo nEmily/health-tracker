@@ -88,6 +88,7 @@ def _build_synthesis_prompt(
     tone_rules = _format_tone_rules(coaching_tone)
     history_summary = _format_history(recent_history)
     entries_summary = _summarize_entries(all_entries)
+    weight_block = _format_weight_block(all_entries, profile)
     messages_str = json.dumps(coach_messages or [], ensure_ascii=False)
     totals_str = json.dumps(totals, ensure_ascii=False)
     goals_str = json.dumps(goals_block, ensure_ascii=False)
@@ -147,6 +148,9 @@ GOALS STATUS:
 
 TODAY'S ENTRIES (the ONLY entries that belong to today):
 {entries_summary}
+
+TODAY'S WEIGHT:
+{weight_block}
 
 COACH MESSAGES (conversation history):
 {messages_str}
@@ -242,6 +246,55 @@ def _format_history(recent_history: list) -> str:
         w = day.get("weight", "")
         weight_str = f" weight={w}" if w else ""
         lines.append(f"  {d}: cal={cal} protein={prot} fiber={fiber}{weight_str}")
+    return "\n".join(lines)
+
+
+def _format_weight_block(all_entries: list, profile: dict) -> str:
+    """Surface today's weight prominently for the synthesis prompt.
+
+    Why: 2026-05-03 production bug had coach repeating "97 lbs" anchor across
+    7 responses while user actually weighed in at 95.3 today. Weight entry was
+    in all_entries but buried as "95.3 lbs: 0 cal, 0g protein" among 12 entries
+    and the LLM anchored on the user's "97" wording instead of today's data.
+    Today's weight must be unambiguous in the prompt.
+    """
+    today_weight = None
+    for e in all_entries or []:
+        if e.get("type") == "weight":
+            v = e.get("weight_value")
+            if v is None:
+                # Try parsing from notes (e.g. "95.3 lbs")
+                import re
+                notes = e.get("notes") or ""
+                m = re.search(r"(\d+\.?\d*)", notes)
+                if m:
+                    try:
+                        v = float(m.group(1))
+                    except ValueError:
+                        v = None
+            if v is not None:
+                unit = e.get("weight_unit") or "lbs"
+                today_weight = f"{v} {unit}"
+                break
+
+    stats = (profile or {}).get("currentStats") or {}
+    weight_stats = stats.get("weight") or {}
+    last_reading = weight_stats.get("current_lbs")
+    trend_7d = weight_stats.get("trend_7d") or {}
+    delta_7d = trend_7d.get("delta")
+
+    lines = []
+    if today_weight:
+        lines.append(f"  Today (logged): {today_weight} -- this is THE current weight; anchor advice on this")
+    elif last_reading is not None:
+        lines.append(f"  No weight logged today. Last reading: {last_reading} lbs")
+    else:
+        lines.append("  No weight data available")
+
+    if delta_7d is not None:
+        direction = "down" if delta_7d < 0 else ("up" if delta_7d > 0 else "flat")
+        lines.append(f"  7-day trend: {direction} {abs(delta_7d):.1f} lbs")
+
     return "\n".join(lines)
 
 

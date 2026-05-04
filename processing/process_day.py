@@ -140,6 +140,14 @@ def main(
     recent_history = _load_recent_history(data_dir, date, days=7)
 
     # ── HOLISTIC SYNTHESIS (Sonnet, single call) ──────────────────────────────
+    all_chat = log_data.get("coachChat", [])
+    unanswered_messages = _compute_unanswered(all_chat, existing_analysis)
+    print(
+        f"[process_day] Coach messages: {len(all_chat)} total, "
+        f"{len(unanswered_messages)} unanswered",
+        flush=True,
+    )
+
     print("[process_day] Running day synthesis (Sonnet)...", flush=True)
     synthesis = synthesize(
         date=date,
@@ -147,9 +155,10 @@ def main(
         totals=totals,
         goals_block=goals_block,
         all_entries=all_entries,
-        coach_messages=log_data.get("coachChat", []),
+        coach_messages=all_chat,
         recent_history=recent_history,
         plan_triggered=plan_should_trigger,
+        unanswered_messages=unanswered_messages,
     )
     print(f"[process_day] Synthesis done: {len(synthesis['coachResponses'])} responses, "
           f"{len(synthesis['highlights'])} highlights", flush=True)
@@ -475,6 +484,29 @@ def _assemble_analysis(
         if weight_result.get("corrected"):
             output["weightCorrectionNote"] = weight_result["correction_note"]
     return output
+
+
+def _compute_unanswered(
+    all_chat: list[dict], existing_analysis: dict | None
+) -> list[dict]:
+    """Filter user messages to those without an existing coach response.
+
+    Without this, every cron tick re-responds to already-answered messages.
+    The merge step dedups by response.id, but each cron tick generates fresh
+    response ids, so id-based dedup never fires. The real dedup key is the
+    message id being responded to (in respondsTo[] or legacy replyTo scalar).
+
+    Returns the subset of all_chat whose id does not appear in any existing
+    response's respondsTo/replyTo. Order preserved.
+    """
+    already_responded_ids: set[str] = set()
+    for r in (existing_analysis or {}).get("coachResponses", []):
+        rt = r.get("respondsTo")
+        if isinstance(rt, list):
+            already_responded_ids.update(x for x in rt if x)
+        elif r.get("replyTo"):
+            already_responded_ids.add(r["replyTo"])
+    return [m for m in all_chat if m.get("id") not in already_responded_ids]
 
 
 def _merge_coach_responses(existing: list[dict], new: list[dict]) -> list[dict]:
