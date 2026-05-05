@@ -304,8 +304,14 @@ const UI = {
       body.appendChild(notes);
     }
 
-    // Show AI description if analyzed, not stale, and different from user notes
-    if (showAnalysis && analysisEntry.description && analysisEntry.description !== entry.notes) {
+    // Show AI description only on food/workout entries where it adds info
+    // beyond what the user typed. For weight/bm/supplement/bodyPhoto, the
+    // entry type + user notes are self-explanatory; tacking on a synthetic
+    // description ("Body weight: 96.6 lbs" under user-typed "96.6 lbs",
+    // "Fiber supplement (Psyllium husk)" under "Fiber") is noisy duplicate
+    // annotation that the user explicitly did not want.
+    const showAIDesc = ['meal', 'snack', 'drink', 'workout'].includes(entry.type);
+    if (showAnalysis && showAIDesc && analysisEntry.description && analysisEntry.description !== entry.notes) {
       const aiDesc = UI.createElement('div', 'entry-analysis');
       aiDesc.textContent = analysisEntry.description;
       body.appendChild(aiDesc);

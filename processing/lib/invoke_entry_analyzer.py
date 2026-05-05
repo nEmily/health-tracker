@@ -22,6 +22,47 @@ _DEFAULT_MODEL = "haiku"
 ZERO_CAL_TYPES = {"bodyPhoto", "weight", "bm"}
 
 
+def _salvage_best_effort(entry: dict, last_result: dict | None) -> dict:
+    """Last-resort fallback when all 3 Haiku attempts fail validation.
+
+    Goal: never silent-fail with 0-cal on a meal/snack/drink entry that the
+    user clearly logged. Salvage anything usable from the last (invalid) LLM
+    response, fill in type-based defaults for the rest. The user can correct
+    in-app; coach should mention totals are estimates. Crucially, the
+    _reanalyzeRequested flag is set on this entry so the NEXT cron tick
+    will retry from scratch with the same (or corrected) input.
+    """
+    type_defaults = {
+        "meal":  {"calories": 400, "protein": 20, "carbs": 40, "fat": 15, "fiber": 4},
+        "snack": {"calories": 150, "protein": 5,  "carbs": 20, "fat": 6,  "fiber": 2},
+        "drink": {"calories": 100, "protein": 2,  "carbs": 15, "fat": 0,  "fiber": 0},
+        "supplement": {"calories": 30,  "protein": 5, "carbs": 1, "fat": 1, "fiber": 3},
+        "workout": {"calories": -200, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
+    }
+    defaults = type_defaults.get(entry.get("type"), type_defaults["meal"])
+    description = (
+        (last_result.get("description") if isinstance(last_result, dict) else None)
+        or entry.get("notes")
+        or f"{entry.get('type', 'entry').capitalize()} (estimated)"
+    )
+    salvaged = {**entry, **defaults}
+    # Override numeric fields from last_result, but ONLY if they're plausible:
+    # numeric AND non-zero. The LLM occasionally returns calories=0 for
+    # entries it can't parse (e.g., empty plate photo); using that would
+    # silent-fail the salvage. Default type-based estimates are better.
+    if isinstance(last_result, dict):
+        for k in ("calories", "protein", "carbs", "fat", "fiber"):
+            v = last_result.get(k)
+            if isinstance(v, (int, float)) and v > 0:
+                salvaged[k] = v
+    salvaged["description"] = description
+    salvaged["confidence"] = "low"
+    salvaged["breakdown"] = []
+    salvaged["solubleFiber"] = 0.0
+    salvaged["insolubleFiber"] = 0.0
+    return salvaged
+
+
 def _build_zero_cal_entry(entry: dict) -> dict:
     """Return a zero-macro analysis result without calling the LLM."""
     et = entry.get("type", "")
@@ -63,23 +104,54 @@ def analyze(
 
     prompt = _build_prompt(entry, profile, photo_path)
 
-    for attempt in range(2):
+    last_violations = None
+    last_result = None
+    for attempt in range(3):
         result = _call_claude(prompt, model, photo_path)
         if result is None:
             continue
 
         violations = _validate_schema(result)
         if not violations:
-            # Merge analyzed fields back onto original entry
             merged = {**entry, **result, "_reanalyzedAt": _now_ms()}
             return merged
 
+        last_violations = violations
+        last_result = result
         if attempt == 0:
-            # First attempt failed schema — retry with violation feedback appended
-            prompt = prompt + f"\n\nPREVIOUS ATTEMPT FAILED SCHEMA VALIDATION: {violations}\nPlease return a valid JSON object with all required fields."
+            prompt = prompt + (
+                f"\n\nPREVIOUS ATTEMPT FAILED SCHEMA VALIDATION: {violations}\n"
+                "Please return a valid JSON object with all required fields."
+            )
+        elif attempt == 1:
+            # Last-resort prompt: force best-effort with explicit instruction.
+            # Common failure: vague notes ('1 serving', empty) + ambiguous photo
+            # → LLM hedges or returns prose. We accept any plausible estimate
+            # rather than 0-cal silent fail; user can correct via edit.
+            prompt = (
+                prompt
+                + "\n\nLAST CHANCE: This is your final attempt. Return valid JSON "
+                "matching the schema EVEN IF the photo is unclear or notes are "
+                "vague. Make a reasonable best-guess estimate (use the entry "
+                "type as a hint -- meals average 300-500 cal, snacks 100-200 cal, "
+                "drinks 50-200 cal). Set confidence='low' to flag the guess. "
+                "Required fields: description, calories, protein, carbs, fat, "
+                "fiber. Numbers must be numeric (not strings). Do not return "
+                "prose or markdown -- only the JSON object."
+            )
 
-    # Both attempts failed — return original with error annotation
-    return {**entry, "_analysisError": "schema validation failed after retry"}
+    # All 3 attempts failed schema. As an absolute fallback, salvage whatever
+    # we can from the last LLM result (description if it gave one, type-based
+    # cal estimate). This prevents 0-cal silent fail. Mark _analysisFallback
+    # so coach can flag it gently in passing.
+    fallback = _salvage_best_effort(entry, last_result)
+    fallback["_analysisError"] = f"schema_violations: {last_violations}" if last_violations else "no_response"
+    # Set _reanalyzeRequested but NOT _reanalyzedAt — so reconcile_entries
+    # treats this as needing re-analysis on the next cron tick (the
+    # `reanalyzed_at > updated_at` check in reconcile fails when
+    # _reanalyzedAt is missing, routing the entry back to new_to_analyze).
+    fallback["_reanalyzeRequested"] = True
+    return fallback
 
 
 def _build_prompt(entry: dict, profile: dict, photo_path: Path | None) -> str:
@@ -150,24 +222,38 @@ and describe what it is.
 def _call_claude(prompt: str, model: str, photo_path: Path | None) -> dict | None:
     """Invoke claude -p and return parsed dict, or None on subprocess/parse error.
 
-    Uses stdin (not shell-quoted arg) and --setting-sources user to avoid
-    inheriting the coach-plugin agent pin which would restrict tools and
-    trigger Coach startup behavior. CLAUDECODE="" defensive against parent env.
+    Photo handling: claude -p does NOT support inline image input directly,
+    but it CAN use the Read tool to open a file at an absolute path. So when
+    a photo is provided, we (1) inject the absolute path into the prompt
+    with an instruction to Read it, and (2) enable the Read tool via
+    --allowedTools so the subprocess can actually open the image.
+
+    Without this, photo-only meals (e.g. notes='1 serving' + photo) silently
+    fail because Haiku is asked to analyze an image it can't see.
     """
     import os
     model_flag = _resolve_model_flag(model)
-    # Use shell=True for cross-platform command resolution (claude is .cmd on Windows).
-    # Pass prompt via stdin to avoid shell quoting issues with embedded quotes/newlines.
+
+    # Build the command. Always allow Read so the LLM can open photos when present.
+    allowed_tools = "Read"
     cmd = (
         f"claude -p --setting-sources user --dangerously-skip-permissions "
-        f"--output-format json --model {model_flag}"
+        f"--output-format json --model {model_flag} "
+        f'--allowedTools "{allowed_tools}"'
     )
     env = {**os.environ, "CLAUDECODE": ""}
 
+    # If a photo is available, prepend an instruction with the absolute path
+    # so Haiku reads it before estimating macros.
     if photo_path and photo_path.exists():
-        # claude -p currently does not have a --file flag for photos — the prompt
-        # already mentions the filename; actual image analysis requires the API.
-        pass
+        abs_path = str(photo_path.resolve())
+        prompt = (
+            f"FIRST: use the Read tool to open this photo at the absolute path "
+            f"below, so you can see what's in the meal. Then estimate macros "
+            f"based on what you observe in the image plus the user notes.\n"
+            f"Photo path: {abs_path}\n\n"
+            + prompt
+        )
 
     try:
         result = subprocess.run(

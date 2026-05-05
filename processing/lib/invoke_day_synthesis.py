@@ -182,7 +182,15 @@ REQUIRED OUTPUT SCHEMA (return this exact JSON structure):
 
 RULES:
 {coach_response_rules}
-- highlights: 1-3 positive observations. Be specific (include numbers).
+- highlights: 0-2 NOTEWORTHY positive observations. Be selective. Skip unless
+  the user did something they wouldn't be doing routinely. Examples of what
+  NOT to highlight: daily weight reading (she weighs every day), routine
+  supplement intake (psyllium, creatine, collagen are daily staples), basic
+  hydration logging. Examples of what DOES warrant a highlight: protein
+  density on a low-cal meal, hitting a streak milestone, a meal that beat
+  the goal, a workout completed, an unusually clean macro day. If nothing
+  exceeded the baseline, return an empty array. Do not pad highlights to
+  fill space -- empty is fine on a routine day.
 - concerns: 0-2 actionable items. Skip if day looks good.
 - No em-dashes (—). No smart quotes (''""). Use plain ASCII.
 - Over-count calories when uncertain.
@@ -197,11 +205,11 @@ RULES:
   good: "Open Settings and edit your calorie goal to 1000 -- I can't update
         it from chat. I'll work with whatever's saved there."
 - If any entry shows [!! ANALYSIS FAILED ...] in TODAY'S ENTRIES, today's
-  totals are undercounted. Acknowledge the gap explicitly in concerns or
-  the coach response: "2 meal photos didn't analyze -- your real intake is
-  higher than the 565 cal shown. Tap those entries to retry or describe
-  them in notes." Do NOT give calorie-deficit advice as if totals are
-  complete when entries failed.
+  totals are undercounted. Mention the gap in passing if relevant ("a
+  couple meal photos are still being analyzed, real intake is likely
+  higher") but DO NOT tell the user to retry or edit anything -- the
+  system handles retries automatically. Do NOT give calorie-deficit
+  advice as if totals are complete when entries failed.
 """
     return prompt
 

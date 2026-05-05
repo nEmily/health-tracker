@@ -306,14 +306,31 @@ def _load_recent_weights(data_dir: Path, current_date: str, days: int = 5) -> li
 
 
 def _find_photo(entry: dict, extract_dir: Path) -> Path | None:
-    """Locate the photo file for an entry."""
-    photo_id = entry.get("photoId") or entry.get("photo_id")
+    """Locate the photo file for an entry.
+
+    Photos in the PWA upload ZIP live at daily/{date}/photos/{entry.id}.{ext}
+    where {entry.id} matches the entry's id field (or photoId for older
+    schemas). The earlier implementation looked at entry.photoId which the
+    PWA never set, so _find_photo always returned None, so Haiku always ran
+    blind on photo entries -- silently failing them. This was the actual
+    cause of "calories not counting" for photo-only meals.
+    """
+    if not entry.get("photo"):
+        return None
+    photo_id = entry.get("photoId") or entry.get("photo_id") or entry.get("id")
     if not photo_id:
         return None
-    for ext in (".jpg", ".jpeg", ".png", ".heic"):
-        candidate = extract_dir / "photos" / f"{photo_id}{ext}"
-        if candidate.exists():
-            return candidate
+    date = entry.get("date")
+    # PWA layout: daily/{date}/photos/{id}.{ext}
+    search_dirs = []
+    if date:
+        search_dirs.append(extract_dir / "daily" / date / "photos")
+    search_dirs.append(extract_dir / "photos")  # legacy / test fixture layout
+    for d in search_dirs:
+        for ext in (".jpg", ".jpeg", ".png", ".heic"):
+            candidate = d / f"{photo_id}{ext}"
+            if candidate.exists():
+                return candidate
     return None
 
 

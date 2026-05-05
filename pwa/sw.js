@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v228-strict-chrono-and-analysis-error-surfacing';
+const CACHE_NAME = 'coach-v229-auto-retry-no-entry-annotations';
 
 const ASSETS = [
   './',
