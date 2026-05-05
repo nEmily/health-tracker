@@ -242,7 +242,7 @@ def _build_zero_cal_entry(entry: dict) -> dict:
 def analyze(
     entry: dict,
     profile: dict,
-    photo_path: Path | None = None,
+    photo_path: Path | list[Path] | None = None,
     model: str = _DEFAULT_MODEL,
 ) -> dict:
     """Analyze a food entry using claude -p.
@@ -250,13 +250,23 @@ def analyze(
     Args:
         entry:      Log entry dict (has notes, type, id, etc.)
         profile:    Loaded profile from load_profile.load_profile()
-        photo_path: Path to the photo file if available.
+        photo_path: Path or list of Paths to photo file(s) for this entry.
+                    Multiple photos are treated as views of the SAME meal
+                    (e.g. dish + nutrition label + receipt). Haiku is told
+                    to cross-reference them and emit ONE estimate.
         model:      Claude model shortname (haiku, sonnet, opus).
 
     Returns:
         Analyzed entry dict with calories, protein, carbs, fat, fiber, description, etc.
         On failure after retry, returns the original entry with an _analysisError key.
     """
+    # Normalize to a list for downstream uniformity
+    if photo_path is None:
+        photo_paths: list[Path] = []
+    elif isinstance(photo_path, (list, tuple)):
+        photo_paths = [p for p in photo_path if p is not None]
+    else:
+        photo_paths = [photo_path]
     if entry.get("type") in ZERO_CAL_TYPES:
         return _build_zero_cal_entry(entry)
 
@@ -269,12 +279,12 @@ def analyze(
     if staple is not None:
         return staple
 
-    prompt = _build_prompt(entry, profile, photo_path)
+    prompt = _build_prompt(entry, profile, photo_paths)
 
     last_violations = None
     last_result = None
     for attempt in range(3):
-        result = _call_claude(prompt, model, photo_path)
+        result = _call_claude(prompt, model, photo_paths)
         if result is None:
             continue
 
@@ -321,7 +331,12 @@ def analyze(
     return fallback
 
 
-def _build_prompt(entry: dict, profile: dict, photo_path: Path | None) -> str:
+def _build_prompt(entry: dict, profile: dict, photo_paths: list[Path] | Path | None) -> str:
+    # Normalize input shape for consistency.
+    if photo_paths is None:
+        photo_paths = []
+    elif isinstance(photo_paths, Path):
+        photo_paths = [photo_paths]
     goals = profile.get("goals") or {}
     prefs = profile.get("preferences") or {}
 
@@ -349,9 +364,18 @@ def _build_prompt(entry: dict, profile: dict, photo_path: Path | None) -> str:
     favorites_str = ", ".join(fav_names) if fav_names else "none noted"
     staples_str = ", ".join(staple_names) if staple_names else "none noted"
 
+    valid_photos = [p for p in photo_paths if p and p.exists()]
     photo_note = ""
-    if photo_path and photo_path.exists():
-        photo_note = f"\nPhoto provided: {photo_path.name} — analyze visually for portion size and ingredients."
+    if len(valid_photos) == 1:
+        photo_note = f"\nPhoto provided: {valid_photos[0].name} -- analyze visually for portion size and ingredients."
+    elif len(valid_photos) > 1:
+        photo_note = (
+            f"\n{len(valid_photos)} PHOTOS provided of the SAME meal/item. They are different "
+            f"views (e.g. the dish + the nutrition label + the receipt). Cross-reference "
+            f"them as ONE entry. If one photo is a label, USE its nutrition values; the "
+            f"others provide visual context for portion size. Files: "
+            f"{', '.join(p.name for p in valid_photos)}"
+        )
 
     # Pass knownProducts brand list as a hint so Haiku recognizes specific
     # products even when the deterministic matcher couldn't (e.g. fuzzy
@@ -420,22 +444,26 @@ and describe what it is.
     return prompt
 
 
-def _call_claude(prompt: str, model: str, photo_path: Path | None) -> dict | None:
+def _call_claude(prompt: str, model: str, photo_paths: list[Path] | Path | None) -> dict | None:
     """Invoke claude -p and return parsed dict, or None on subprocess/parse error.
 
     Photo handling: claude -p does NOT support inline image input directly,
-    but it CAN use the Read tool to open a file at an absolute path. So when
-    a photo is provided, we (1) inject the absolute path into the prompt
-    with an instruction to Read it, and (2) enable the Read tool via
-    --allowedTools so the subprocess can actually open the image.
+    but it CAN use the Read tool to open files at absolute paths. So when
+    photos are provided, we (1) inject absolute paths into the prompt with
+    an instruction to Read them, and (2) enable the Read tool via
+    --allowedTools so the subprocess can actually open the images.
 
-    Without this, photo-only meals (e.g. notes='1 serving' + photo) silently
-    fail because Haiku is asked to analyze an image it can't see.
+    Multi-photo: each photo path is read in order, and Haiku is told to
+    treat them as views of the SAME meal (cross-reference for accuracy).
     """
     import os
-    model_flag = _resolve_model_flag(model)
+    # Normalize input
+    if photo_paths is None:
+        photo_paths = []
+    elif isinstance(photo_paths, Path):
+        photo_paths = [photo_paths]
 
-    # Build the command. Always allow Read so the LLM can open photos when present.
+    model_flag = _resolve_model_flag(model)
     allowed_tools = "Read"
     cmd = (
         f"claude -p --setting-sources user --dangerously-skip-permissions "
@@ -444,15 +472,26 @@ def _call_claude(prompt: str, model: str, photo_path: Path | None) -> dict | Non
     )
     env = {**os.environ, "CLAUDECODE": ""}
 
-    # If a photo is available, prepend an instruction with the absolute path
-    # so Haiku reads it before estimating macros.
-    if photo_path and photo_path.exists():
-        abs_path = str(photo_path.resolve())
+    # If photos are available, prepend an instruction with absolute paths
+    # so Haiku reads them all before estimating macros.
+    valid = [p for p in photo_paths if p and p.exists()]
+    if len(valid) == 1:
         prompt = (
-            f"FIRST: use the Read tool to open this photo at the absolute path "
-            f"below, so you can see what's in the meal. Then estimate macros "
-            f"based on what you observe in the image plus the user notes.\n"
-            f"Photo path: {abs_path}\n\n"
+            f"FIRST: use the Read tool to open this photo at the absolute "
+            f"path below, so you can see what's in the meal. Then estimate "
+            f"macros based on the image plus the user notes.\n"
+            f"Photo path: {valid[0].resolve()}\n\n"
+            + prompt
+        )
+    elif len(valid) > 1:
+        path_lines = "\n".join(f"  Photo {i+1}: {p.resolve()}" for i, p in enumerate(valid))
+        prompt = (
+            f"FIRST: use the Read tool to open EACH of the {len(valid)} photos "
+            f"at the absolute paths below. They are different views of the "
+            f"SAME meal/item -- cross-reference them. If one is a nutrition "
+            f"label, prefer its values. Estimate ONE set of macros for the "
+            f"meal as a whole.\n"
+            f"{path_lines}\n\n"
             + prompt
         )
 

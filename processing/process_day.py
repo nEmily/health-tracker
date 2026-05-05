@@ -115,7 +115,7 @@ def main(
         print(f"[process_day] Analyzing {len(new_entries)} entries (Haiku, max 3 parallel)...", flush=True)
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_entry = {
-                executor.submit(analyze_entry, entry, profile, _find_photo(entry, extract_dir)): entry
+                executor.submit(analyze_entry, entry, profile, _find_photos(entry, extract_dir)): entry
                 for entry in new_entries
             }
             for future in as_completed(future_to_entry):
@@ -321,33 +321,53 @@ def _load_recent_weights(data_dir: Path, current_date: str, days: int = 5) -> li
     return list(reversed(weights))
 
 
-def _find_photo(entry: dict, extract_dir: Path) -> Path | None:
-    """Locate the photo file for an entry.
+def _find_photos(entry: dict, extract_dir: Path) -> list[Path]:
+    """Locate ALL photo files for an entry. Returns a list (possibly empty).
 
-    Photos in the PWA upload ZIP live at daily/{date}/photos/{entry.id}.{ext}
-    where {entry.id} matches the entry's id field (or photoId for older
-    schemas). The earlier implementation looked at entry.photoId which the
-    PWA never set, so _find_photo always returned None, so Haiku always ran
-    blind on photo entries -- silently failing them. This was the actual
-    cause of "calories not counting" for photo-only meals.
+    Multi-photo per entry: PWA names them daily/{date}/photos/{entry.id}.jpg,
+    {entry.id}_2.jpg, {entry.id}_3.jpg, etc. (single-photo entries have just
+    {entry.id}.jpg, no suffix). Without finding all of them, Haiku only sees
+    the first photo even if the user uploaded 3 views of the same meal --
+    classic cause of mis-estimated calories.
     """
     if not entry.get("photo"):
-        return None
+        return []
     photo_id = entry.get("photoId") or entry.get("photo_id") or entry.get("id")
     if not photo_id:
-        return None
+        return []
     date = entry.get("date")
-    # PWA layout: daily/{date}/photos/{id}.{ext}
-    search_dirs = []
+    search_dirs: list[Path] = []
     if date:
         search_dirs.append(extract_dir / "daily" / date / "photos")
     search_dirs.append(extract_dir / "photos")  # legacy / test fixture layout
+
+    found: list[Path] = []
     for d in search_dirs:
-        for ext in (".jpg", ".jpeg", ".png", ".heic"):
-            candidate = d / f"{photo_id}{ext}"
-            if candidate.exists():
-                return candidate
-    return None
+        if not d.exists():
+            continue
+        # First photo: {id}.{ext}; additional: {id}_2.{ext}, {id}_3.{ext}, ...
+        # Cap at 12 to avoid pathological loops.
+        for n in range(1, 13):
+            suffix = "" if n == 1 else f"_{n}"
+            for ext in (".jpg", ".jpeg", ".png", ".heic"):
+                candidate = d / f"{photo_id}{suffix}{ext}"
+                if candidate.exists():
+                    found.append(candidate)
+                    break
+            else:
+                # No file with this index in this dir; try next dir or stop
+                if n == 1:
+                    continue  # base photo not in this dir, try next dir
+                break  # no more numbered photos in this dir
+        if found:
+            return found  # use first dir that has anything
+    return found
+
+
+def _find_photo(entry: dict, extract_dir: Path) -> Path | None:
+    """Back-compat single-photo wrapper for legacy callers (tests etc.)."""
+    photos = _find_photos(entry, extract_dir)
+    return photos[0] if photos else None
 
 
 def _plan_triggered(profile: dict, existing_analysis: dict | None, totals: dict) -> bool:
