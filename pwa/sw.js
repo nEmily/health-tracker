@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v230-deterministic-dailies';
+const CACHE_NAME = 'coach-v231-known-products-and-label-learning';
 
 const ASSETS = [
   './',

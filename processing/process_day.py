@@ -126,6 +126,22 @@ def main(
 
     # ── DETERMINISTIC LAYER 2 ─────────────────────────────────────────────────
     all_entries = analyzed_new + kept_entries
+
+    # Auto-grow knownProducts from any label-photo uploads. If user
+    # uploaded a photo of a nutrition-facts panel, Haiku set isLabel:true
+    # and labelData; we persist the product to preferences so future entries
+    # match it deterministically.
+    if not dry_run and analyzed_new:
+        try:
+            from lib.learn_known_products import learn_from_analyzed_entries
+            n_learned = learn_from_analyzed_entries(analyzed_new, data_dir)
+            if n_learned:
+                print(f"[process_day] Learned {n_learned} new product(s) from labels", flush=True)
+                # Reload profile so downstream synthesis sees the new products
+                profile = load_profile(data_dir, extract_dir)
+        except Exception as exc:
+            print(f"[process_day] WARN: label learning failed: {exc}", flush=True)
+
     estimate_split_inplace(all_entries)
     totals = compute_totals(all_entries)
     print(f"[process_day] Totals: {totals}", flush=True)

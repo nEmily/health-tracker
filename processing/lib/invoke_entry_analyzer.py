@@ -44,53 +44,107 @@ _STAPLE_EXCLUSIONS = {
 }
 
 
-def _match_daily_staple(entry: dict, profile: dict) -> dict | None:
-    """If the entry text exactly matches a known daily staple, return canonical
-    macros from preferences.dailyStaples. Returns None if no match.
+def _match_known_product(entry: dict, profile: dict) -> dict | None:
+    """If entry notes match a known product, return canonical macros from
+    preferences.knownProducts (or the older dailyStaples). Returns None if
+    no match.
 
-    Why: Haiku had been re-estimating dailies inconsistently every cron tick
-    (psyllium counted 14 different ways, 0-390 cal, across 60 entries). The
-    user explicitly logged these macros once in dailyStaples — use them as
-    ground truth.
+    Why: Haiku had been re-estimating products inconsistently every cron
+    tick (psyllium counted 14 different ways, 0-390 cal). The user logged
+    these macros once — use them as ground truth.
 
-    Why conservative: the user has 7+ specific shakes (whey isolate, Flimeal,
-    etc.) with their own nutrition labels. We must NOT match the proteinShake
-    staple on generic words like "shake" or "protein" — only on the exact
-    "Orgain Plant Protein" phrase. For other shakes, Haiku should analyze the
-    photo label rather than substituting wrong macros.
+    Two source paths checked, in order of precedence:
+      1. preferences.knownProducts (rich entries with explicit triggers list)
+      2. preferences.dailyStaples (older curated daily list, hardcoded
+         _STAPLE_TRIGGERS and _STAPLE_EXCLUSIONS for safety)
 
-    Match rules:
-      - Only supplement-type entries
-      - Notes (lowercased) must contain a phrase from _STAPLE_TRIGGERS for
-        exactly ONE staple
-      - Notes must NOT contain a phrase from _STAPLE_EXCLUSIONS for that
-        staple (rules out whey/Flimeal/etc. masquerading as Orgain shake)
+    User has 7+ specific shakes (Orgain, whey isolate, Flimeal, etc.) — each
+    can be a distinct knownProduct with its own triggers. The matcher
+    REJECTS ambiguous cases (multiple matches with different macros) so
+    Haiku still gets a chance on edge cases.
     """
-    if entry.get("type") != "supplement":
-        return None
-
     text = ((entry.get("notes") or "") + " " + (entry.get("description") or "")).lower()
     if not text.strip():
         return None
 
     prefs = profile.get("preferences") or {}
+
+    # Path 1: knownProducts (rich, trigger-driven)
+    products = prefs.get("knownProducts")
+    if isinstance(products, dict):
+        match = _match_against_known_products(text, entry, products)
+        if match is not None:
+            return match
+
+    # Path 2: dailyStaples (legacy curated list)
+    if entry.get("type") != "supplement":
+        return None  # staples matcher only applies to supplements
     staples = prefs.get("dailyStaples") or (prefs.get("dietary") or {}).get("dailyStaples")
     if not isinstance(staples, dict):
         return None
+    return _match_against_daily_staples(text, entry, staples)
 
+
+def _match_against_known_products(
+    text: str, entry: dict, products: dict
+) -> dict | None:
+    """Match text against knownProducts using each product's explicit triggers
+    list. First match wins; ambiguous matches return None.
+    """
+    matched_key = None
+    matched_product = None
+    for key, val in products.items():
+        if key.startswith("_") or not isinstance(val, dict):
+            continue  # skip _about etc.
+        triggers = val.get("triggers") or []
+        if not isinstance(triggers, list):
+            continue
+        if not any(isinstance(t, str) and t.lower() in text for t in triggers):
+            continue
+        if matched_key is not None and matched_key != key:
+            # Ambiguous — defer to Haiku
+            return None
+        matched_key = key
+        matched_product = val
+
+    if matched_product is None:
+        return None
+    cal = matched_product.get("cal")
+    protein = matched_product.get("protein")
+    if not isinstance(cal, (int, float)) or not isinstance(protein, (int, float)):
+        return None
+
+    return {
+        **entry,
+        "description": matched_product.get("name") or matched_key,
+        "calories": cal,
+        "protein": protein,
+        "carbs": matched_product.get("carbs", 0),
+        "fat": matched_product.get("fat", 0),
+        "fiber": matched_product.get("fiber", 0),
+        "solubleFiber": matched_product.get("solubleFiber", 0.0),
+        "insolubleFiber": matched_product.get("insolubleFiber", 0.0),
+        "confidence": "high",
+        "breakdown": [],
+        "_knownProductMatch": matched_key,
+        "_reanalyzedAt": _now_ms(),
+    }
+
+
+def _match_against_daily_staples(
+    text: str, entry: dict, staples: dict
+) -> dict | None:
+    """Match against the legacy dailyStaples shape using hardcoded triggers."""
     matched_key = None
     for key, triggers in _STAPLE_TRIGGERS.items():
         if key not in staples:
             continue
         if not any(t in text for t in triggers):
             continue
-        # Trigger matched — check exclusions
         exclusions = _STAPLE_EXCLUSIONS.get(key, [])
         if any(x in text for x in exclusions):
             continue
         if matched_key is not None and matched_key != key:
-            # Ambiguous (e.g. notes mention both "fiber" and "creatine") —
-            # safer to let Haiku handle.
             return None
         matched_key = key
 
@@ -103,7 +157,7 @@ def _match_daily_staple(entry: dict, profile: dict) -> dict | None:
     cal = val.get("cal")
     protein = val.get("protein")
     if not isinstance(cal, (int, float)) or not isinstance(protein, (int, float)):
-        return None  # staple lacks complete macros — let Haiku try
+        return None
 
     return {
         **entry,
@@ -120,6 +174,10 @@ def _match_daily_staple(entry: dict, profile: dict) -> dict | None:
         "_dailyStapleMatch": matched_key,
         "_reanalyzedAt": _now_ms(),
     }
+
+
+# Back-compat alias for any callers still using the old name.
+_match_daily_staple = _match_known_product
 
 
 def _salvage_best_effort(entry: dict, last_result: dict | None) -> dict:
@@ -295,6 +353,22 @@ def _build_prompt(entry: dict, profile: dict, photo_path: Path | None) -> str:
     if photo_path and photo_path.exists():
         photo_note = f"\nPhoto provided: {photo_path.name} — analyze visually for portion size and ingredients."
 
+    # Pass knownProducts brand list as a hint so Haiku recognizes specific
+    # products even when the deterministic matcher couldn't (e.g. fuzzy
+    # spelling, partial brand mention). Haiku should still extract per-photo
+    # macros if visible.
+    known_products = prefs.get("knownProducts") or {}
+    known_brand_lines = []
+    for k, v in (known_products.items() if isinstance(known_products, dict) else []):
+        if k.startswith("_") or not isinstance(v, dict):
+            continue
+        cal = v.get("cal")
+        prot = v.get("protein")
+        if cal is None or prot is None:
+            continue
+        known_brand_lines.append(f"  - {v.get('name', k)}: {cal} cal, {prot}g protein")
+    known_brands_str = "\n".join(known_brand_lines) if known_brand_lines else "  (none configured)"
+
     prompt = f"""Analyze this food entry and return ONLY a JSON object (no markdown fences, no extra text).
 
 Entry type: {entry_type}
@@ -304,9 +378,25 @@ User notes: {notes or "(none)"}
 User context:
 - Favorites: {favorites_str}
 - Daily staples: {staples_str}
+- Known products (use these macros if recognized in photo or notes):
+{known_brands_str}
 {f'- Tuna flavoring rules: {tuna_rules}' if tuna_rules else ''}
 {f'- Edamame note: {edamame_rule}' if edamame_rule else ''}
 - IMPORTANT: Always over-count calories when uncertain. Round up.
+
+NUTRITION-LABEL DETECTION:
+If the photo is primarily a NUTRITION FACTS LABEL (the back-of-package
+panel showing serving size, calories, macros) rather than a prepared meal,
+do all of the following:
+  1. Set "isLabel": true
+  2. Use the per-serving values from the label as the entry's macros
+  3. Include "labelData" with extracted product info:
+     "labelData": {{
+       "productName": "<name from package, as readable as possible>",
+       "servingSize": "<as printed, e.g. '1 scoop (35g)'>",
+       "servingsPerContainer": <number or null>
+     }}
+  4. Description should be the product name, not "nutrition label"
 
 Required JSON fields:
 {{
@@ -317,6 +407,8 @@ Required JSON fields:
   "fat": <integer, grams>,
   "fiber": <integer, grams>,
   "confidence": "high|medium|low",
+  "isLabel": <true if photo is a nutrition-facts label, else false or omit>,
+  "labelData": {{ ... }}  // only when isLabel: true
   "breakdown": [
     {{"item": "ingredient name", "grams": 0, "cal": 0, "protein": 0}}
   ]
