@@ -52,12 +52,21 @@ def append(
     date_str = f"{today_pt.year}-{today_pt.month:02d}-{today_pt.day:02d}"
     date_header = f"## {date_str}"
 
-    # Build a response lookup by replyTo text (for pairing)
-    response_by_reply_to: dict[str, dict] = {}
+    # Build response lookup keyed by user message ID. Each response can
+    # respond to one or more messages via respondsTo[] (newer schema) or
+    # replyTo (legacy scalar). Both forms accepted; fall through if neither.
+    responses_by_msg_id: dict[str, list[dict]] = {}
+    used_response_ids: set[str] = set()
     for resp in coach_responses:
-        reply_to = resp.get("replyTo", "").strip()
-        if reply_to:
-            response_by_reply_to[reply_to] = resp
+        responds_to = resp.get("respondsTo")
+        if isinstance(responds_to, list) and responds_to:
+            target_ids = [str(x) for x in responds_to if x]
+        elif resp.get("replyTo"):
+            target_ids = [str(resp["replyTo"])]
+        else:
+            target_ids = []
+        for mid in target_ids:
+            responses_by_msg_id.setdefault(mid, []).append(resp)
 
     # Build new lines to append
     new_lines: list[str] = []
@@ -67,16 +76,40 @@ def append(
         if not msg_text:
             continue
 
+        msg_id = msg.get("id") or ""
         msg_ts = _format_timestamp(_extract_dt(msg.get("timestamp")))
         new_lines.append(f"**User** ({msg_ts}): {msg_text}")
 
-        response = response_by_reply_to.get(msg_text)
-        if response:
-            resp_text = (response.get("text") or "").strip()
-            resp_ts = _format_timestamp(_extract_dt(response.get("timestamp")))
+        # Append every coach response that targeted this message id (preserves
+        # batched responses and multi-target responses). De-dup so a response
+        # responding to N messages only appears once.
+        for resp in responses_by_msg_id.get(msg_id, []):
+            rid = resp.get("id") or id(resp)
+            if rid in used_response_ids:
+                continue
+            used_response_ids.add(rid)
+            resp_text = (resp.get("text") or "").strip()
+            resp_ts = _format_timestamp(_extract_dt(resp.get("timestamp")))
             new_lines.append(f"**Coach** ({resp_ts}): {resp_text}")
 
         new_lines.append("")  # blank line separator
+
+    # Append any unsolicited coach responses (highlights/observations not tied
+    # to a user message) at the END of the day's section, unless already used.
+    for resp in coach_responses:
+        rid = resp.get("id") or id(resp)
+        if rid in used_response_ids:
+            continue
+        responds_to = resp.get("respondsTo") or ([resp["replyTo"]] if resp.get("replyTo") else [])
+        if responds_to:
+            continue  # had a target but it wasn't in coach_messages — silently skip
+        used_response_ids.add(rid)
+        resp_text = (resp.get("text") or "").strip()
+        if not resp_text:
+            continue
+        resp_ts = _format_timestamp(_extract_dt(resp.get("timestamp")))
+        new_lines.append(f"**Coach** ({resp_ts}): {resp_text}")
+        new_lines.append("")
 
     if not new_lines:
         return

@@ -154,8 +154,12 @@ def learn_from_analyzed_entries(
                 break
 
         existing = products.get(existing_key)
-        if existing == new_record:
-            continue  # idempotent — no change
+        # Compare ignoring lastUpdated (second-resolution wall-clock varies)
+        if existing and isinstance(existing, dict):
+            existing_compared = {k: v for k, v in existing.items() if k != "lastUpdated"}
+            new_compared = {k: v for k, v in new_record.items() if k != "lastUpdated"}
+            if existing_compared == new_compared:
+                continue  # idempotent — no meaningful change
         # If we matched an existing product by normalized name but with a
         # different slug, replace the old slug. Otherwise, write under the
         # newly-slugified key.

@@ -120,6 +120,41 @@ def _parse_conversations_md(content: str) -> dict[str, list[dict]]:
     return result
 
 
+def load_coach_responses_for_date(data_dir: Path, date_iso: str) -> list[dict]:
+    """Read conversations.md and return coachResponses[] entries for the given date.
+
+    Used as a fallback when the analysis JSON for that date is missing or
+    has been deleted — prevents previously-delivered coach messages from
+    being lost on re-processing.
+
+    Returns coachResponses-shaped dicts: {id, timestamp, respondsTo, text}.
+    Empty list if conversations.md doesn't exist or has no entries for date.
+    """
+    path = data_dir / "conversations.md"
+    if not path.exists():
+        return []
+    try:
+        content = path.read_text(encoding="utf-8")
+    except Exception:
+        return []
+    parsed = _parse_conversations_md(content)
+    items = parsed.get(date_iso, [])
+    out: list[dict] = []
+    for item in items:
+        text = item.get("text") or ""
+        if not text:
+            continue
+        ts = _time_to_epoch_ms(date_iso, item.get("time_str", ""))
+        out.append({
+            "id": _make_restore_id(ts, text),
+            "timestamp": ts,
+            "respondsTo": [],
+            "text": text,
+            "_source": "conversations-md-restore",
+        })
+    return out
+
+
 def _atomic_write(path: Path, data: dict) -> None:
     tmp = path.with_suffix(".tmp")
     try:

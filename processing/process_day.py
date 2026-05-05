@@ -215,9 +215,32 @@ def main(
 
     # Chat immutability rule (Part 7.1): coachResponses entries are append-only.
     # Once written, never modified by future cron runs.
+    #
+    # Build the canonical set of pre-existing responses from TWO sources:
+    #   1. The day's analysis JSON (if present)
+    #   2. conversations.md (always-on append-only log) — backstop for when
+    #      the analysis file was deleted/corrupted/lost. Without this, ANY
+    #      reprocessing that runs without the prior analysis silently loses
+    #      previously-delivered coach messages.
+    existing_responses: list[dict] = []
     if existing_analysis:
+        existing_responses = list(existing_analysis.get("coachResponses") or [])
+    try:
+        from lib.restore_chat_history import load_coach_responses_for_date
+        from_md = load_coach_responses_for_date(data_dir, date)
+        if from_md:
+            # De-dup by hashing text — entries already in existing_responses
+            # are kept verbatim; conversations.md ones fill any gaps.
+            have_texts = {(r.get("text") or "").strip() for r in existing_responses}
+            for r in from_md:
+                if (r.get("text") or "").strip() not in have_texts:
+                    existing_responses.append(r)
+    except Exception as exc:
+        print(f"[process_day] WARN: conversations.md restore failed: {exc}", flush=True)
+
+    if existing_responses:
         output["coachResponses"] = _merge_coach_responses(
-            existing=existing_analysis.get("coachResponses", []),
+            existing=existing_responses,
             new=output["coachResponses"],
         )
 

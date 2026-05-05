@@ -93,11 +93,10 @@ The plan file must describe this loop explicitly, including what validation chec
 
 ## Branching
 
-- **`dev`** — default working branch. All iteration happens here. Push freely.
-- **`main`** — release branch. GitHub Pages deploys from here. Only gets polished, tested merges.
-- To release: merge `dev` → `main` via PR or direct merge after `/validate` + `/review` pass.
-- Never push untested work directly to `main`.
-- Always bump the plugin version in `coach-plugin/.claude-plugin/plugin.json` when creating a PR to main — even for one-line fixes. Use patch (1.3.1) for fixes, minor (1.4.0) for features. Users need the version number to verify updates worked.
+- **Work directly on `main`** (per Emily's directive 2026-05-04). No more PR-from-dev requirement. `dev` is kept as a sync target so existing tooling and the orchestrator dashboard don't break, but pushes go to main first; merge `main → dev` after to keep dev at parity.
+- **`main`** — primary working branch. GitHub Pages deploys from here. Push freely after tests pass locally.
+- **`dev`** — kept in sync with main; not the iteration branch anymore.
+- Always bump the plugin version in `coach-plugin/.claude-plugin/plugin.json` for plugin-affecting changes — even one-line fixes. Patch (1.3.1) for fixes, minor (1.4.0) for features. Users need the version to verify updates worked.
 
 ## Running Locally
 

@@ -159,6 +159,17 @@ COACH MESSAGES (conversation history):
 Each line is a one-line summary: DATE: cal=X protein=Y fiber=Z [weight=W] [key_event]
 {history_summary}
 
+=== AVAILABLE TOOLS ===
+You have Read, Glob, and Grep available. Use them when historical context
+beyond the 7-day window above would meaningfully improve a coach response.
+Examples of when to dig:
+  - User references something from "a few weeks ago" -> grep conversations.md
+  - User asks "did I do this before?" -> glob analysis files, read a few
+  - You want to verify a profile setting -> read coach/profile/*.json
+  - User cites a specific past meal/workout -> grep analysis/*.json for it
+The conversations.md file at coach/conversations.md is your full chat
+history with the user — append-only, never overwritten.
+
 === INSTRUCTIONS ===
 - highlights, concerns, and coachResponses MUST describe TODAY'S behavior only (date: {date})
 - The entries listed in TODAY'S DATA above are the complete and authoritative list of what happened today
@@ -356,9 +367,15 @@ def _call_claude(prompt: str, model: str) -> dict | None:
     model_flag = _resolve_model_flag(model)
     # Use shell=True for cross-platform command resolution (claude is .cmd on Windows).
     # Pass prompt via stdin to avoid shell quoting issues with embedded quotes/newlines.
+    # Give synthesis Read+Glob+Grep so it can pull longer-term context when
+    # the prompt-supplied 7-day recent_history isn't enough. Sonnet can read
+    # conversations.md, profile/*.json/*.md, weekly summaries, etc.
+    # No Write/Edit/Bash — synthesis must remain non-mutating; the
+    # orchestrator owns all file writes.
     cmd = (
         f"claude -p --setting-sources user --dangerously-skip-permissions "
-        f"--output-format json --model {model_flag}"
+        f"--output-format json --model {model_flag} "
+        f'--allowedTools "Read Glob Grep"'
     )
     env = {**os.environ, "CLAUDECODE": ""}
 

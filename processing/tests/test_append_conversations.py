@@ -5,15 +5,29 @@ from datetime import timedelta
 from lib.append_conversations import append, rotate_if_needed, _pt_now
 
 
-def _msg(text, ts=None):
-    m = {"text": text}
+_NEXT_ID = [0]
+def _msg(text, ts=None, id_=None):
+    if id_ is None:
+        _NEXT_ID[0] += 1
+        id_ = f"msg_{_NEXT_ID[0]}"
+    m = {"text": text, "id": id_}
     if ts:
         m["timestamp"] = ts
     return m
 
 
-def _resp(reply_to, text, ts=None):
-    r = {"replyTo": reply_to, "text": text}
+def _resp(target_msg_or_id, text, ts=None):
+    """target_msg_or_id: a _msg dict OR an explicit string id.
+
+    Note: the OLD test signature passed message TEXT here — that was matching
+    the old (buggy) behavior of append_conversations which keyed responses
+    by text. Real schema uses id-based linking via respondsTo[]/replyTo.
+    """
+    if isinstance(target_msg_or_id, dict):
+        target_id = target_msg_or_id["id"]
+    else:
+        target_id = target_msg_or_id
+    r = {"replyTo": target_id, "respondsTo": [target_id], "text": text}
     if ts:
         r["timestamp"] = ts
     return r
@@ -22,14 +36,16 @@ def _resp(reply_to, text, ts=None):
 def test_creates_file_if_missing(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    append(data_dir, [_msg("How am I doing?")], [_resp("How am I doing?", "Looking good today.")])
+    msg = _msg("How am I doing?")
+    append(data_dir, [msg], [_resp(msg, "Looking good today.")])
     assert (data_dir / "conversations.md").exists()
 
 
 def test_writes_user_and_coach(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    append(data_dir, [_msg("test msg")], [_resp("test msg", "coach reply")])
+    msg = _msg("test msg")
+    append(data_dir, [msg], [_resp(msg, "coach reply")])
     content = (data_dir / "conversations.md").read_text(encoding="utf-8")
     assert "test msg" in content
     assert "coach reply" in content
@@ -38,10 +54,44 @@ def test_writes_user_and_coach(tmp_path):
 def test_user_coach_labels(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    append(data_dir, [_msg("question")], [_resp("question", "answer")])
+    msg = _msg("question")
+    append(data_dir, [msg], [_resp(msg, "answer")])
     content = (data_dir / "conversations.md").read_text(encoding="utf-8")
     assert "**User**" in content
     assert "**Coach**" in content
+
+
+def test_batched_response_appended_once(tmp_path):
+    """A single response that respondsTo multiple messages should appear once
+    after the LAST message it answered (or at least once, dedup'd)."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    m1 = _msg("first question")
+    m2 = _msg("second question")
+    batched = {
+        "id": "resp_batched",
+        "replyTo": m1["id"],
+        "respondsTo": [m1["id"], m2["id"]],
+        "text": "answer to both",
+    }
+    append(data_dir, [m1, m2], [batched])
+    content = (data_dir / "conversations.md").read_text(encoding="utf-8")
+    # Coach reply text appears exactly once even though it targets 2 msgs
+    assert content.count("answer to both") == 1
+    assert "first question" in content
+    assert "second question" in content
+
+
+def test_response_with_no_target_appended_at_end(tmp_path):
+    """Cron-generated coach observation with empty respondsTo should still
+    be persisted (not silently dropped)."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    m = _msg("hi")
+    unsolicited = {"id": "obs1", "respondsTo": [], "text": "trend observation"}
+    append(data_dir, [m], [unsolicited])
+    content = (data_dir / "conversations.md").read_text(encoding="utf-8")
+    assert "trend observation" in content
 
 
 def test_date_header_created(tmp_path):
