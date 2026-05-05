@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v229-auto-retry-no-entry-annotations';
+const CACHE_NAME = 'coach-v230-deterministic-dailies';
 
 const ASSETS = [
   './',

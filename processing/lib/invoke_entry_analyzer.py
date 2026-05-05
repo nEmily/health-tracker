@@ -22,6 +22,106 @@ _DEFAULT_MODEL = "haiku"
 ZERO_CAL_TYPES = {"bodyPhoto", "weight", "bm"}
 
 
+# Conservative trigger list per daily-staple key. Matched ONLY if at least
+# one phrase is a substring (case-insensitive) of the user's notes.
+# Important: the user has 7+ different protein shakes (whey isolate, Flimeal,
+# etc.) — only match the proteinShake staple on the EXACT brand "Orgain
+# Plant Protein", never on generic words like "shake" or "protein".
+_STAPLE_TRIGGERS = {
+    "fiber":        ["psyllium", "fiber"],          # her shorthand "Fiber" = psyllium
+    "collagen":     ["collagen"],
+    "creatine":     ["creatine"],
+    "proteinShake": ["orgain plant protein"],       # specific brand only
+    "wellnessShot": ["suja", "wellness shot"],
+}
+
+# Phrases that disqualify a daily-staple match — these indicate a different
+# specific product the user logs separately (Haiku should analyze the photo
+# / nutrition label rather than substituting Orgain Plant Protein macros).
+_STAPLE_EXCLUSIONS = {
+    "proteinShake": ["whey", "isolate", "flimeal", "ka'chava", "huel",
+                     "labrada", "muscletech", "myprotein"],
+}
+
+
+def _match_daily_staple(entry: dict, profile: dict) -> dict | None:
+    """If the entry text exactly matches a known daily staple, return canonical
+    macros from preferences.dailyStaples. Returns None if no match.
+
+    Why: Haiku had been re-estimating dailies inconsistently every cron tick
+    (psyllium counted 14 different ways, 0-390 cal, across 60 entries). The
+    user explicitly logged these macros once in dailyStaples — use them as
+    ground truth.
+
+    Why conservative: the user has 7+ specific shakes (whey isolate, Flimeal,
+    etc.) with their own nutrition labels. We must NOT match the proteinShake
+    staple on generic words like "shake" or "protein" — only on the exact
+    "Orgain Plant Protein" phrase. For other shakes, Haiku should analyze the
+    photo label rather than substituting wrong macros.
+
+    Match rules:
+      - Only supplement-type entries
+      - Notes (lowercased) must contain a phrase from _STAPLE_TRIGGERS for
+        exactly ONE staple
+      - Notes must NOT contain a phrase from _STAPLE_EXCLUSIONS for that
+        staple (rules out whey/Flimeal/etc. masquerading as Orgain shake)
+    """
+    if entry.get("type") != "supplement":
+        return None
+
+    text = ((entry.get("notes") or "") + " " + (entry.get("description") or "")).lower()
+    if not text.strip():
+        return None
+
+    prefs = profile.get("preferences") or {}
+    staples = prefs.get("dailyStaples") or (prefs.get("dietary") or {}).get("dailyStaples")
+    if not isinstance(staples, dict):
+        return None
+
+    matched_key = None
+    for key, triggers in _STAPLE_TRIGGERS.items():
+        if key not in staples:
+            continue
+        if not any(t in text for t in triggers):
+            continue
+        # Trigger matched — check exclusions
+        exclusions = _STAPLE_EXCLUSIONS.get(key, [])
+        if any(x in text for x in exclusions):
+            continue
+        if matched_key is not None and matched_key != key:
+            # Ambiguous (e.g. notes mention both "fiber" and "creatine") —
+            # safer to let Haiku handle.
+            return None
+        matched_key = key
+
+    if matched_key is None:
+        return None
+
+    val = staples[matched_key]
+    if not isinstance(val, dict):
+        return None
+    cal = val.get("cal")
+    protein = val.get("protein")
+    if not isinstance(cal, (int, float)) or not isinstance(protein, (int, float)):
+        return None  # staple lacks complete macros — let Haiku try
+
+    return {
+        **entry,
+        "description": val.get("name") or matched_key,
+        "calories": cal,
+        "protein": protein,
+        "carbs": val.get("carbs", 0),
+        "fat": val.get("fat", 0),
+        "fiber": val.get("fiber", 0),
+        "solubleFiber": val.get("solubleFiber", 0.0),
+        "insolubleFiber": val.get("insolubleFiber", 0.0),
+        "confidence": "high",
+        "breakdown": [],
+        "_dailyStapleMatch": matched_key,
+        "_reanalyzedAt": _now_ms(),
+    }
+
+
 def _salvage_best_effort(entry: dict, last_result: dict | None) -> dict:
     """Last-resort fallback when all 3 Haiku attempts fail validation.
 
@@ -101,6 +201,15 @@ def analyze(
     """
     if entry.get("type") in ZERO_CAL_TYPES:
         return _build_zero_cal_entry(entry)
+
+    # Daily staples lookup: if user's notes match a known daily (psyllium,
+    # collagen, creatine, etc.), use the canonical macros from
+    # preferences.dailyStaples instead of asking Haiku to re-estimate.
+    # Without this, Haiku has been counting psyllium 14 different ways
+    # (0-390 cal), shake 14 ways, etc — wildly inconsistent across days.
+    staple = _match_daily_staple(entry, profile)
+    if staple is not None:
+        return staple
 
     prompt = _build_prompt(entry, profile, photo_path)
 
