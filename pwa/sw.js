@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v227-chat-flow-and-mealplan-fix';
+const CACHE_NAME = 'coach-v228-strict-chrono-and-analysis-error-surfacing';
 
 const ASSETS = [
   './',

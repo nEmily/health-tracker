@@ -187,6 +187,21 @@ RULES:
 - No em-dashes (—). No smart quotes (''""). Use plain ASCII.
 - Over-count calories when uncertain.
 - Never address user as babe, honey, sweetie, or girl.
+- You CANNOT directly update goals, settings, or profile. If the user asks
+  to change a calorie target, protein goal, or any setting in chat, do NOT
+  say "got it, that's the new target" -- that is a lie because the system
+  does not persist chat-driven settings changes. Instead, acknowledge the
+  intent and tell them to update it via the Settings tab. Example:
+  user: "bump my calories to 1000"
+  bad:  "Got it, 1000 is the new target."
+  good: "Open Settings and edit your calorie goal to 1000 -- I can't update
+        it from chat. I'll work with whatever's saved there."
+- If any entry shows [!! ANALYSIS FAILED ...] in TODAY'S ENTRIES, today's
+  totals are undercounted. Acknowledge the gap explicitly in concerns or
+  the coach response: "2 meal photos didn't analyze -- your real intake is
+  higher than the 565 cal shown. Tap those entries to retry or describe
+  them in notes." Do NOT give calorie-deficit advice as if totals are
+  complete when entries failed.
 """
     return prompt
 
@@ -306,7 +321,14 @@ def _summarize_entries(entries: list) -> str:
         desc = e.get("description") or e.get("notes") or e.get("type", "entry")
         cal = e.get("calories", 0)
         prot = e.get("protein", 0)
-        lines.append(f"  - {desc}: {cal} cal, {prot}g protein")
+        # Flag entries that failed Haiku analysis so synthesis knows totals
+        # are undercounted and can address the gap. Without this, coach gave
+        # advice on 565 cal when 2 unanalyzed photo meals could be 200-500
+        # additional cal.
+        suffix = ""
+        if e.get("_analysisError"):
+            suffix = "  [!! ANALYSIS FAILED -- not counted in totals; ask user to retry or describe]"
+        lines.append(f"  - {desc}: {cal} cal, {prot}g protein{suffix}")
     return "\n".join(lines)
 
 
@@ -371,16 +393,22 @@ def _normalize_coach_responses(entries: list) -> list:
 
     - Ensures respondsTo is always an array (migrates old replyTo: scalar)
     - Emits replyTo: respondsTo[0] for backward compat with old phone clients
-    - Assigns id and timestamp if missing
+    - OVERRIDES LLM-supplied timestamp with actual synthesis time. The LLM
+      tends to fabricate plausible-looking chat times (e.g. 17:00 on the dot)
+      that don't reflect when the response was actually generated. We use
+      server-side time so chronological sort on the phone reflects reality.
     """
+    now_ms = int(time.time() * 1000)
     result = []
-    for e in entries:
+    for i, e in enumerate(entries):
         responds_to = e.get("respondsTo")
         if not isinstance(responds_to, list):
             reply_to = e.get("replyTo")
             responds_to = [reply_to] if reply_to else []
 
-        ts = e.get("timestamp") or int(time.time() * 1000)
+        # Always use actual synthesis time; +i ms preserves stable order if the
+        # LLM emits multiple responses (rare with batched-mode but possible).
+        ts = now_ms + i
         entry_id = e.get("id") or f"coach_resp_{ts}"
 
         normalized = {

@@ -61,52 +61,28 @@ const CoachChat = {
     }
     const hasUnanswered = userMessages.some(m => !answeredIds.has(m.id));
 
-    // Build conversation-order timeline: a coach response appears immediately
-    // after the last user message it answers, not 30 min later when the cron
-    // actually generated it. This produces back-and-forth flow that reads like
-    // a real conversation.
-    //
-    // sortKey:
-    //   - user message: own timestamp
-    //   - coach response: max(respondsTo timestamps) + 1 ms (so it sits right
-    //     after the message-cluster it answers). Falls back to own timestamp
-    //     if respondsTo is empty (unsolicited replies / legacy data).
-    const userTsMap = new Map();
-    for (const m of userMessages) userTsMap.set(m.id, m.timestamp || 0);
-
+    // Strict chronological order by timestamp.
+    // Coach response timestamps are now server-side (synthesis run time) —
+    // the orchestrator overrides any LLM-supplied value in
+    // _normalize_coach_responses. So raw timestamp sort reflects reality:
+    // user msgs at the time the user sent them, coach replies at the time
+    // the cron actually generated them.
     const timeline = [];
     for (const msg of userMessages) {
       timeline.push({
         role: 'user',
         text: msg.text || msg.content,
         timestamp: msg.timestamp || 0,
-        sortKey: msg.timestamp || 0,
       });
     }
     for (const cm of coachMessages) {
-      const ownTs = cm.timestamp || 0;
-      const refTs = (cm.respondsTo || []).reduce(
-        (max, id) => Math.max(max, userTsMap.get(id) || 0), 0
-      );
-      // +1 ms places coach reply right after the user message it answers.
-      // If no respondsTo refs found, fall back to own timestamp.
-      const sortKey = refTs > 0 ? refTs + 1 : ownTs;
-      timeline.push({
-        role: 'coach',
-        text: cm.text || cm.content,
-        timestamp: ownTs,
-        sortKey,
-      });
+      const ts = cm.timestamp || 0;
+      timeline.push({ role: 'coach', text: cm.text || cm.content, timestamp: ts });
       if (cm.settingUpdates) {
-        timeline.push({
-          role: 'settings',
-          updates: cm.settingUpdates,
-          timestamp: ownTs,
-          sortKey: sortKey + 0.5,
-        });
+        timeline.push({ role: 'settings', updates: cm.settingUpdates, timestamp: ts + 1 });
       }
     }
-    timeline.sort((a, b) => a.sortKey - b.sortKey);
+    timeline.sort((a, b) => a.timestamp - b.timestamp);
 
     let html = '<div class="coach-chat">';
 
