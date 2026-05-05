@@ -88,6 +88,7 @@ def _build_synthesis_prompt(
     tone_rules = _format_tone_rules(coaching_tone)
     history_summary = _format_history(recent_history)
     entries_summary = _summarize_entries(all_entries)
+    weight_block = _format_weight_block(all_entries, profile)
     messages_str = json.dumps(coach_messages or [], ensure_ascii=False)
     totals_str = json.dumps(totals, ensure_ascii=False)
     goals_str = json.dumps(goals_block, ensure_ascii=False)
@@ -148,6 +149,9 @@ GOALS STATUS:
 TODAY'S ENTRIES (the ONLY entries that belong to today):
 {entries_summary}
 
+TODAY'S WEIGHT:
+{weight_block}
+
 COACH MESSAGES (conversation history):
 {messages_str}
 {unanswered_section}
@@ -178,11 +182,34 @@ REQUIRED OUTPUT SCHEMA (return this exact JSON structure):
 
 RULES:
 {coach_response_rules}
-- highlights: 1-3 positive observations. Be specific (include numbers).
+- highlights: 0-2 NOTEWORTHY positive observations. Be selective. Skip unless
+  the user did something they wouldn't be doing routinely. Examples of what
+  NOT to highlight: daily weight reading (she weighs every day), routine
+  supplement intake (psyllium, creatine, collagen are daily staples), basic
+  hydration logging. Examples of what DOES warrant a highlight: protein
+  density on a low-cal meal, hitting a streak milestone, a meal that beat
+  the goal, a workout completed, an unusually clean macro day. If nothing
+  exceeded the baseline, return an empty array. Do not pad highlights to
+  fill space -- empty is fine on a routine day.
 - concerns: 0-2 actionable items. Skip if day looks good.
 - No em-dashes (—). No smart quotes (''""). Use plain ASCII.
 - Over-count calories when uncertain.
 - Never address user as babe, honey, sweetie, or girl.
+- You CANNOT directly update goals, settings, or profile. If the user asks
+  to change a calorie target, protein goal, or any setting in chat, do NOT
+  say "got it, that's the new target" -- that is a lie because the system
+  does not persist chat-driven settings changes. Instead, acknowledge the
+  intent and tell them to update it via the Settings tab. Example:
+  user: "bump my calories to 1000"
+  bad:  "Got it, 1000 is the new target."
+  good: "Open Settings and edit your calorie goal to 1000 -- I can't update
+        it from chat. I'll work with whatever's saved there."
+- If any entry shows [!! ANALYSIS FAILED ...] in TODAY'S ENTRIES, today's
+  totals are undercounted. Mention the gap in passing if relevant ("a
+  couple meal photos are still being analyzed, real intake is likely
+  higher") but DO NOT tell the user to retry or edit anything -- the
+  system handles retries automatically. Do NOT give calorie-deficit
+  advice as if totals are complete when entries failed.
 """
     return prompt
 
@@ -245,6 +272,55 @@ def _format_history(recent_history: list) -> str:
     return "\n".join(lines)
 
 
+def _format_weight_block(all_entries: list, profile: dict) -> str:
+    """Surface today's weight prominently for the synthesis prompt.
+
+    Why: 2026-05-03 production bug had coach repeating "97 lbs" anchor across
+    7 responses while user actually weighed in at 95.3 today. Weight entry was
+    in all_entries but buried as "95.3 lbs: 0 cal, 0g protein" among 12 entries
+    and the LLM anchored on the user's "97" wording instead of today's data.
+    Today's weight must be unambiguous in the prompt.
+    """
+    today_weight = None
+    for e in all_entries or []:
+        if e.get("type") == "weight":
+            v = e.get("weight_value")
+            if v is None:
+                # Try parsing from notes (e.g. "95.3 lbs")
+                import re
+                notes = e.get("notes") or ""
+                m = re.search(r"(\d+\.?\d*)", notes)
+                if m:
+                    try:
+                        v = float(m.group(1))
+                    except ValueError:
+                        v = None
+            if v is not None:
+                unit = e.get("weight_unit") or "lbs"
+                today_weight = f"{v} {unit}"
+                break
+
+    stats = (profile or {}).get("currentStats") or {}
+    weight_stats = stats.get("weight") or {}
+    last_reading = weight_stats.get("current_lbs")
+    trend_7d = weight_stats.get("trend_7d") or {}
+    delta_7d = trend_7d.get("delta")
+
+    lines = []
+    if today_weight:
+        lines.append(f"  Today (logged): {today_weight} -- this is THE current weight; anchor advice on this")
+    elif last_reading is not None:
+        lines.append(f"  No weight logged today. Last reading: {last_reading} lbs")
+    else:
+        lines.append("  No weight data available")
+
+    if delta_7d is not None:
+        direction = "down" if delta_7d < 0 else ("up" if delta_7d > 0 else "flat")
+        lines.append(f"  7-day trend: {direction} {abs(delta_7d):.1f} lbs")
+
+    return "\n".join(lines)
+
+
 def _summarize_entries(entries: list) -> str:
     if not entries:
         return "(no entries)"
@@ -253,7 +329,14 @@ def _summarize_entries(entries: list) -> str:
         desc = e.get("description") or e.get("notes") or e.get("type", "entry")
         cal = e.get("calories", 0)
         prot = e.get("protein", 0)
-        lines.append(f"  - {desc}: {cal} cal, {prot}g protein")
+        # Flag entries that failed Haiku analysis so synthesis knows totals
+        # are undercounted and can address the gap. Without this, coach gave
+        # advice on 565 cal when 2 unanalyzed photo meals could be 200-500
+        # additional cal.
+        suffix = ""
+        if e.get("_analysisError"):
+            suffix = "  [!! ANALYSIS FAILED -- not counted in totals; ask user to retry or describe]"
+        lines.append(f"  - {desc}: {cal} cal, {prot}g protein{suffix}")
     return "\n".join(lines)
 
 
@@ -318,16 +401,22 @@ def _normalize_coach_responses(entries: list) -> list:
 
     - Ensures respondsTo is always an array (migrates old replyTo: scalar)
     - Emits replyTo: respondsTo[0] for backward compat with old phone clients
-    - Assigns id and timestamp if missing
+    - OVERRIDES LLM-supplied timestamp with actual synthesis time. The LLM
+      tends to fabricate plausible-looking chat times (e.g. 17:00 on the dot)
+      that don't reflect when the response was actually generated. We use
+      server-side time so chronological sort on the phone reflects reality.
     """
+    now_ms = int(time.time() * 1000)
     result = []
-    for e in entries:
+    for i, e in enumerate(entries):
         responds_to = e.get("respondsTo")
         if not isinstance(responds_to, list):
             reply_to = e.get("replyTo")
             responds_to = [reply_to] if reply_to else []
 
-        ts = e.get("timestamp") or int(time.time() * 1000)
+        # Always use actual synthesis time; +i ms preserves stable order if the
+        # LLM emits multiple responses (rare with batched-mode but possible).
+        ts = now_ms + i
         entry_id = e.get("id") or f"coach_resp_{ts}"
 
         normalized = {

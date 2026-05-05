@@ -115,7 +115,7 @@ def main(
         print(f"[process_day] Analyzing {len(new_entries)} entries (Haiku, max 3 parallel)...", flush=True)
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_entry = {
-                executor.submit(analyze_entry, entry, profile, _find_photo(entry, extract_dir)): entry
+                executor.submit(analyze_entry, entry, profile, _find_photos(entry, extract_dir)): entry
                 for entry in new_entries
             }
             for future in as_completed(future_to_entry):
@@ -126,6 +126,32 @@ def main(
 
     # ── DETERMINISTIC LAYER 2 ─────────────────────────────────────────────────
     all_entries = analyzed_new + kept_entries
+
+    # Auto-grow knownProducts from any label-photo uploads. If user
+    # uploaded a photo of a nutrition-facts panel, Haiku set isLabel:true
+    # and labelData; we persist the product to preferences so future entries
+    # match it deterministically.
+    if not dry_run and analyzed_new:
+        try:
+            from lib.learn_known_products import learn_from_analyzed_entries
+            n_learned = learn_from_analyzed_entries(analyzed_new, data_dir)
+            if n_learned:
+                print(f"[process_day] Learned {n_learned} new product(s) from labels", flush=True)
+                # Reload profile so downstream synthesis sees the new products
+                profile = load_profile(data_dir, extract_dir)
+        except Exception as exc:
+            print(f"[process_day] WARN: label learning failed: {exc}", flush=True)
+
+    # Detect and mark duplicates (one meal logged as 2+ entries via separate
+    # photos). Marked entries are zeroed in totals; coach can still see them.
+    try:
+        from lib.dedupe_meals import apply_duplicate_marks
+        n_dupes = apply_duplicate_marks(all_entries)
+        if n_dupes:
+            print(f"[process_day] Marked {n_dupes} duplicate entry/entries (one meal logged twice)", flush=True)
+    except Exception as exc:
+        print(f"[process_day] WARN: dedupe_meals failed: {exc}", flush=True)
+
     estimate_split_inplace(all_entries)
     totals = compute_totals(all_entries)
     print(f"[process_day] Totals: {totals}", flush=True)
@@ -140,6 +166,17 @@ def main(
     recent_history = _load_recent_history(data_dir, date, days=7)
 
     # ── HOLISTIC SYNTHESIS (Sonnet, single call) ──────────────────────────────
+    # PWA emits coachChat: null when there are no chat messages (not missing key).
+    # dict.get("k", default) returns None for an explicit null, not the default,
+    # so we need an explicit None-check, not a default arg.
+    all_chat = log_data.get("coachChat") or []
+    unanswered_messages = _compute_unanswered(all_chat, existing_analysis)
+    print(
+        f"[process_day] Coach messages: {len(all_chat)} total, "
+        f"{len(unanswered_messages)} unanswered",
+        flush=True,
+    )
+
     print("[process_day] Running day synthesis (Sonnet)...", flush=True)
     synthesis = synthesize(
         date=date,
@@ -147,9 +184,10 @@ def main(
         totals=totals,
         goals_block=goals_block,
         all_entries=all_entries,
-        coach_messages=log_data.get("coachChat", []),
+        coach_messages=all_chat,
         recent_history=recent_history,
         plan_triggered=plan_should_trigger,
+        unanswered_messages=unanswered_messages,
     )
     print(f"[process_day] Synthesis done: {len(synthesis['coachResponses'])} responses, "
           f"{len(synthesis['highlights'])} highlights", flush=True)
@@ -158,7 +196,7 @@ def main(
     synthesis = _run_grounding_validation(
         synthesis, all_entries, totals, profile, date,
         plan_triggered=plan_should_trigger,
-        coach_messages=log_data.get("coachChat", []),
+        coach_messages=(log_data.get("coachChat") or []),
         recent_history=recent_history,
         goals_block=goals_block,
     )
@@ -200,7 +238,7 @@ def main(
 
         append_conversations(
             data_dir,
-            log_data.get("coachChat", []),
+            (log_data.get("coachChat") or []),
             synthesis["coachResponses"],
         )
     else:
@@ -293,16 +331,53 @@ def _load_recent_weights(data_dir: Path, current_date: str, days: int = 5) -> li
     return list(reversed(weights))
 
 
-def _find_photo(entry: dict, extract_dir: Path) -> Path | None:
-    """Locate the photo file for an entry."""
-    photo_id = entry.get("photoId") or entry.get("photo_id")
+def _find_photos(entry: dict, extract_dir: Path) -> list[Path]:
+    """Locate ALL photo files for an entry. Returns a list (possibly empty).
+
+    Multi-photo per entry: PWA names them daily/{date}/photos/{entry.id}.jpg,
+    {entry.id}_2.jpg, {entry.id}_3.jpg, etc. (single-photo entries have just
+    {entry.id}.jpg, no suffix). Without finding all of them, Haiku only sees
+    the first photo even if the user uploaded 3 views of the same meal --
+    classic cause of mis-estimated calories.
+    """
+    if not entry.get("photo"):
+        return []
+    photo_id = entry.get("photoId") or entry.get("photo_id") or entry.get("id")
     if not photo_id:
-        return None
-    for ext in (".jpg", ".jpeg", ".png", ".heic"):
-        candidate = extract_dir / "photos" / f"{photo_id}{ext}"
-        if candidate.exists():
-            return candidate
-    return None
+        return []
+    date = entry.get("date")
+    search_dirs: list[Path] = []
+    if date:
+        search_dirs.append(extract_dir / "daily" / date / "photos")
+    search_dirs.append(extract_dir / "photos")  # legacy / test fixture layout
+
+    found: list[Path] = []
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        # First photo: {id}.{ext}; additional: {id}_2.{ext}, {id}_3.{ext}, ...
+        # Cap at 12 to avoid pathological loops.
+        for n in range(1, 13):
+            suffix = "" if n == 1 else f"_{n}"
+            for ext in (".jpg", ".jpeg", ".png", ".heic"):
+                candidate = d / f"{photo_id}{suffix}{ext}"
+                if candidate.exists():
+                    found.append(candidate)
+                    break
+            else:
+                # No file with this index in this dir; try next dir or stop
+                if n == 1:
+                    continue  # base photo not in this dir, try next dir
+                break  # no more numbered photos in this dir
+        if found:
+            return found  # use first dir that has anything
+    return found
+
+
+def _find_photo(entry: dict, extract_dir: Path) -> Path | None:
+    """Back-compat single-photo wrapper for legacy callers (tests etc.)."""
+    photos = _find_photos(entry, extract_dir)
+    return photos[0] if photos else None
 
 
 def _plan_triggered(profile: dict, existing_analysis: dict | None, totals: dict) -> bool:
@@ -475,6 +550,31 @@ def _assemble_analysis(
         if weight_result.get("corrected"):
             output["weightCorrectionNote"] = weight_result["correction_note"]
     return output
+
+
+def _compute_unanswered(
+    all_chat: list[dict], existing_analysis: dict | None
+) -> list[dict]:
+    """Filter user messages to those without an existing coach response.
+
+    Without this, every cron tick re-responds to already-answered messages.
+    The merge step dedups by response.id, but each cron tick generates fresh
+    response ids, so id-based dedup never fires. The real dedup key is the
+    message id being responded to (in respondsTo[] or legacy replyTo scalar).
+
+    Returns the subset of all_chat whose id does not appear in any existing
+    response's respondsTo/replyTo. Order preserved.
+    """
+    if not all_chat:
+        return []
+    already_responded_ids: set[str] = set()
+    for r in ((existing_analysis or {}).get("coachResponses") or []):
+        rt = r.get("respondsTo")
+        if isinstance(rt, list):
+            already_responded_ids.update(x for x in rt if x)
+        elif r.get("replyTo"):
+            already_responded_ids.add(r["replyTo"])
+    return [m for m in all_chat if m.get("id") not in already_responded_ids]
 
 
 def _merge_coach_responses(existing: list[dict], new: list[dict]) -> list[dict]:

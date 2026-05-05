@@ -67,6 +67,7 @@ Users interact with the AI coach through three channels:
 4. All data stays private and local
 5. Always over-count calories when estimating
 6. No emojis in the UI or code output
+7. **Never auto-populate user profile data** (`coach/profile/*.json`, `dailyStaples`, `knownProducts`, `favorites`, etc.) without an explicit prompt from Emily or the user. Schema can ship with empty defaults; populating belongs to (a) the user editing in-app, (b) the user explicitly asking the coach to add it, or (c) a sanctioned auto-learner that runs only on user-initiated triggers (e.g. label-photo upload sets isLabel:true → learner adds entry). Do not "seed" the user's preferences with brands, products, or food preferences guessed from history.
 
 ## Changelog
 

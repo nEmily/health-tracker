@@ -67,13 +67,29 @@ def reconcile(
             new_to_analyze.append(entry)
             continue
 
-        # Entry exists — check reanalysis flag
-        if entry.get("_reanalyzeRequested") or existing.get("_reanalyzeRequested"):
+        # Entry exists — check reanalysis flags. Re-analyze if:
+        #   1. _reanalyzeRequested is set (user edit, or prior failure marked
+        #      it), AND last reanalysis was before last edit
+        #   2. _analysisError is set on the existing entry — failed entries
+        #      MUST auto-retry every tick until they pass; never silent-stick
+        needs_retry = (
+            entry.get("_reanalyzeRequested")
+            or existing.get("_reanalyzeRequested")
+            or existing.get("_analysisError")
+        )
+        if needs_retry:
             updated_at = _ts(entry.get("updatedAt") or entry.get("createdAt"))
             reanalyzed_at = _ts(existing.get("_reanalyzedAt"))
 
-            if reanalyzed_at is not None and reanalyzed_at > updated_at:
-                # Already re-analyzed after the last edit — keep it
+            # Only skip retry if BOTH (a) prior reanalysis succeeded after the
+            # last edit AND (b) the existing entry has no _analysisError.
+            already_clean = (
+                reanalyzed_at is not None
+                and updated_at is not None
+                and reanalyzed_at > updated_at
+                and not existing.get("_analysisError")
+            )
+            if already_clean:
                 kept_verbatim.append(existing)
             else:
                 # Needs re-analysis: merge log entry fields over existing

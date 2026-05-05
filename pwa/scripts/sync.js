@@ -556,7 +556,10 @@ const CloudRelay = {
 
     const config = await this.getConfig();
     if (!config || !config.workerUrl || !config.syncKey) {
-      this.log('Upload skipped — not configured', 'error');
+      // Not an error — first-run / unconfigured users will see this every
+      // time they save data until they connect sync. Use info level so it
+      // doesn't pollute console.error or trigger error-monitoring tools.
+      this.log('Upload skipped — not configured', 'info');
       return;
     }
 

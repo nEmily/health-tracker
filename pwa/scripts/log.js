@@ -164,8 +164,9 @@ const Log = {
     group.innerHTML = `
       <div class="photo-actions">
         <button class="btn btn-secondary" id="log-photo-capture"><span class="btn-icon">${UI.svg.camera}</span> Take Photo</button>
-        <button class="btn btn-ghost" id="log-photo-pick"><span class="btn-icon">${UI.svg.gallery}</span> Choose from Library</button>
+        <button class="btn btn-ghost" id="log-photo-pick"><span class="btn-icon">${UI.svg.gallery}</span> Add Photos</button>
       </div>
+      <p class="form-hint" style="font-size:var(--text-xs); color:var(--text-muted); margin:4px 0 0;">Tap "Add Photos" to attach multiple pics (dish + label + receipt) to this single entry. Tap "Take Photo" again to add another.</p>
       <div id="log-photo-preview-area" class="multi-photo-grid"></div>
     `;
 
@@ -190,8 +191,11 @@ const Log = {
   },
 
   async handlePhotoPick(preset) {
-    const result = await Camera.pick(preset);
-    if (result) Log.addPendingPhoto(result);
+    // Multi-select: ALL photos picked here attach to the SAME meal entry.
+    // For batch-mode (one-photo-per-entry) the user uses App.batchPhotos
+    // from the Today tab instead.
+    const results = await Camera.pickMultiple(preset);
+    for (const photo of results) Log.addPendingPhoto(photo);
   },
 
   addPendingPhoto(photo) {

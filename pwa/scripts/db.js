@@ -470,7 +470,16 @@ async function importAnalysis(dateStr, data) {
   // Extract and save bundled meal plan and regimen before storing analysis
   if (data.mealPlan) {
     const plan = { ...data.mealPlan };
-    if (!plan.generatedDate) plan.generatedDate = plan.generated || dateStr;
+    // Normalize generatedDate to a string. Older synthesis output emitted
+    // `generated: <epoch ms>` (number); the keyPath/sort logic expects strings.
+    if (!plan.generatedDate) {
+      const raw = plan.generated || dateStr;
+      plan.generatedDate = (typeof raw === 'number')
+        ? new Date(raw).toISOString().slice(0, 10)
+        : String(raw);
+    } else if (typeof plan.generatedDate === 'number') {
+      plan.generatedDate = new Date(plan.generatedDate).toISOString().slice(0, 10);
+    }
     tx.objectStore('mealPlan').put(plan);
   }
   if (data.regimen) {
@@ -803,8 +812,12 @@ async function getMealPlan() {
     request.onsuccess = () => {
       const plans = request.result;
       if (plans.length === 0) return resolve(null);
-      // Return the most recent plan
-      plans.sort((a, b) => (b.generatedDate || '').localeCompare(a.generatedDate || ''));
+      // Return the most recent plan.
+      // Defensive: generatedDate may be a number (epoch ms) from older synthesis
+      // output that emitted `generated: <epoch>` instead of an ISO date string.
+      // String() coerces both to comparable strings (epoch numbers compare
+      // correctly as strings within the same magnitude, and ISO dates do too).
+      plans.sort((a, b) => String(b.generatedDate || '').localeCompare(String(a.generatedDate || '')));
       resolve(plans[0]);
     };
     request.onerror = (e) => reject(e.target.error);

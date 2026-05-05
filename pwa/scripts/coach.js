@@ -61,10 +61,19 @@ const CoachChat = {
     }
     const hasUnanswered = userMessages.some(m => !answeredIds.has(m.id));
 
-    // Build chronological timeline: all user messages + all coach responses sorted by timestamp
+    // Strict chronological order by timestamp.
+    // Coach response timestamps are now server-side (synthesis run time) —
+    // the orchestrator overrides any LLM-supplied value in
+    // _normalize_coach_responses. So raw timestamp sort reflects reality:
+    // user msgs at the time the user sent them, coach replies at the time
+    // the cron actually generated them.
     const timeline = [];
     for (const msg of userMessages) {
-      timeline.push({ role: 'user', text: msg.text || msg.content, timestamp: msg.timestamp || 0 });
+      timeline.push({
+        role: 'user',
+        text: msg.text || msg.content,
+        timestamp: msg.timestamp || 0,
+      });
     }
     for (const cm of coachMessages) {
       const ts = cm.timestamp || 0;
