@@ -142,6 +142,16 @@ def main(
         except Exception as exc:
             print(f"[process_day] WARN: label learning failed: {exc}", flush=True)
 
+    # Detect and mark duplicates (one meal logged as 2+ entries via separate
+    # photos). Marked entries are zeroed in totals; coach can still see them.
+    try:
+        from lib.dedupe_meals import apply_duplicate_marks
+        n_dupes = apply_duplicate_marks(all_entries)
+        if n_dupes:
+            print(f"[process_day] Marked {n_dupes} duplicate entry/entries (one meal logged twice)", flush=True)
+    except Exception as exc:
+        print(f"[process_day] WARN: dedupe_meals failed: {exc}", flush=True)
+
     estimate_split_inplace(all_entries)
     totals = compute_totals(all_entries)
     print(f"[process_day] Totals: {totals}", flush=True)
