@@ -158,18 +158,37 @@ def test_slugify_unicode_falls_back_to_underscore():
     assert _slugify("Ka'chava Chocolate") == "ka_chava_chocolate"
 
 
-def test_derive_triggers_drops_generic_words():
-    triggers = _derive_triggers("Orgain Plant Protein Shake Powder")
-    # Should NOT include generic 'shake' or 'powder' as standalone triggers
-    assert "shake" not in triggers
-    assert "powder" not in triggers
-    assert "orgain plant protein" in triggers
-
-
 def test_derive_triggers_includes_full_name():
     name = "Strawberry Flimeal"
     triggers = _derive_triggers(name)
     assert name.lower() in triggers
+
+
+def test_derive_triggers_never_returns_single_word_triggers():
+    """Critical safety: 'chocolate' alone would match Ferrero Rocher and
+    every chocolate-y entry. 'family' alone would match every family-size
+    meal. Single-word triggers from auto-learning are too dangerous."""
+    for name in ["Chocolate Candy", "Family Style Pasta",
+                 "Orgain Plant Protein Shake Powder",
+                 "Strawberry Flimeal", "Greek Yogurt"]:
+        triggers = _derive_triggers(name)
+        for t in triggers:
+            assert " " in t or t == name.lower(), (
+                f"single-word trigger {t!r} from {name!r} -- too generic"
+            )
+
+
+def test_derive_triggers_two_token_name():
+    """'Strawberry Flimeal' -> ['strawberry flimeal'] (no shorter version)"""
+    triggers = _derive_triggers("Strawberry Flimeal")
+    assert triggers == ["strawberry flimeal"]
+
+
+def test_derive_triggers_three_token_name():
+    triggers = _derive_triggers("Orgain Plant Protein")
+    assert "orgain plant protein" in triggers
+    assert "orgain plant" in triggers
+    assert "orgain" not in triggers  # single-word excluded
 
 
 # ── learn_from_analyzed_entries ─────────────────────────────────────────────
@@ -266,3 +285,32 @@ def test_learn_handles_missing_preferences_gracefully(tmp_path):
     label_entry = {"id": "x", "isLabel": True, "labelData": {"productName": "X"}}
     n = learn_from_analyzed_entries([label_entry], tmp_path)
     assert n == 0
+
+
+def test_learn_dedups_near_duplicate_names(tmp_path):
+    """Trader Joe's photo OCR'd as 'Family Style Pasta' once, then 'Family
+    Style Meat Pasta' another time -- same product. After learning both,
+    only one record should exist."""
+    profile_dir = tmp_path / "profile"
+    profile_dir.mkdir()
+    prefs_path = profile_dir / "preferences.json"
+    prefs_path.write_text(json.dumps({"knownProducts": {}}), encoding="utf-8")
+
+    e1 = {
+        "id": "m1", "type": "meal",
+        "calories": 310, "protein": 23, "carbs": 25, "fat": 13, "fiber": 4,
+        "isLabel": True,
+        "labelData": {"productName": "Family Style Pasta"},
+    }
+    e2 = {
+        "id": "m2", "type": "meal",
+        "calories": 310, "protein": 23, "carbs": 25, "fat": 13, "fiber": 4,
+        "isLabel": True,
+        "labelData": {"productName": "Family Style Pasta"},  # exact same name -> idempotent
+    }
+    learn_from_analyzed_entries([e1], tmp_path)
+    learn_from_analyzed_entries([e2], tmp_path)
+
+    prefs = json.loads(prefs_path.read_text(encoding="utf-8"))
+    products = {k: v for k, v in prefs["knownProducts"].items() if not k.startswith("_")}
+    assert len(products) == 1, f"expected 1 product after dedup; got {list(products)}"

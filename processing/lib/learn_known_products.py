@@ -29,6 +29,38 @@ _GENERIC_TOKENS = {
 }
 
 
+_NAME_DEDUP_STOPWORDS = frozenset({
+    "the", "a", "an", "of", "for", "to", "in", "and", "with",
+    "style", "size", "single", "serving", "meal", "shake",
+    "drink", "supplement", "powder",
+})
+
+
+def _normalize_name_for_dedup(name: str) -> str:
+    """Reduce a product name to a canonical fingerprint for dedup.
+
+    'Family Style Pasta' and 'Family Style Meat Pasta' are clearly the same
+    Trader Joe's product photographed twice. We normalize by:
+      - lowercasing
+      - dropping stopwords
+      - sorting remaining tokens
+    Result: 'family pasta' from the first, 'family meat pasta' from the
+    second. Different fingerprints -> still treated as separate products.
+    But minor variations like trailing 'meal' or pluralization collapse.
+
+    This is intentionally conservative — when in doubt, keep separate
+    entries (user can merge manually). False merges are worse than dups.
+    """
+    if not name:
+        return ""
+    tokens = [
+        re.sub(r"[^a-z0-9]", "", t.lower())
+        for t in name.split()
+    ]
+    distinctive = sorted(t for t in tokens if t and t not in _NAME_DEDUP_STOPWORDS)
+    return " ".join(distinctive)
+
+
 def _slugify(name: str) -> str:
     """orgain plant protein -> orgain_plant_protein. ASCII, lowercase, _-joined."""
     s = re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
@@ -38,23 +70,27 @@ def _slugify(name: str) -> str:
 def _derive_triggers(name: str) -> list[str]:
     """Build a conservative trigger list from the product name.
 
+    NEVER returns single-word triggers. Single words ("chocolate", "family",
+    "fiber") false-match unrelated entries. Auto-learning has to be safe by
+    default — the user can manually add narrower or broader triggers later.
+
     Strategy:
-      1. Full lowercased name (always — generic words OK inside phrases)
-      2. First 3 raw tokens joined (still keeps generic words in the phrase
-         but not as standalone triggers)
-      3. First distinctive (non-generic) token alone if length >= 5 chars
-         (single-token triggers are riskier; distinct + long enough)
+      1. Full lowercased name
+      2. First 3 raw tokens joined (if name is 3+ tokens)
+      3. First 2 raw tokens joined (if name is 2+ tokens)
     """
     name_lc = (name or "").lower().strip()
     if not name_lc:
         return []
-    triggers: list[str] = [name_lc]
     raw_tokens = [t for t in re.split(r"\s+", name_lc) if t]
-    if len(raw_tokens) >= 2:
+    if len(raw_tokens) < 2:
+        # Single-token product name is too generic for auto-derived
+        # triggers. The user can manually add a trigger if needed.
+        return [name_lc] if name_lc else []
+    triggers: list[str] = [name_lc]
+    if len(raw_tokens) >= 3:
         triggers.append(" ".join(raw_tokens[:3]))
-    distinctive = [t for t in raw_tokens if t not in _GENERIC_TOKENS]
-    if distinctive and len(distinctive[0]) >= 5:
-        triggers.append(distinctive[0])
+    triggers.append(" ".join(raw_tokens[:2]))
     # Dedup, preserve order
     seen = set()
     return [t for t in triggers if not (t in seen or seen.add(t))]
@@ -104,9 +140,27 @@ def learn_from_analyzed_entries(
             "addedFromEntry": entry.get("id"),
             "lastUpdated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
-        existing = products.get(key)
+        # Dedup: if a product with a similar normalized name already exists,
+        # update IT rather than creating a near-duplicate. Trader Joe's photo
+        # was OCR'd as both "Family Style Pasta" and "Family Style Meat Pasta"
+        # in two separate runs — same product, two slugs without this guard.
+        normalized = _normalize_name_for_dedup(name)
+        existing_key = key
+        for ek, ev in products.items():
+            if ek.startswith("_") or not isinstance(ev, dict):
+                continue
+            if _normalize_name_for_dedup(ev.get("name", "")) == normalized:
+                existing_key = ek
+                break
+
+        existing = products.get(existing_key)
         if existing == new_record:
             continue  # idempotent — no change
+        # If we matched an existing product by normalized name but with a
+        # different slug, replace the old slug. Otherwise, write under the
+        # newly-slugified key.
+        if existing_key != key and existing_key in products:
+            products.pop(existing_key, None)
         products[key] = new_record
         changed += 1
 
