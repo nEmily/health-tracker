@@ -367,7 +367,11 @@ const QuickLog = {
     const sheet = UI.createElement('div', 'modal-sheet');
     sheet.style.maxHeight = '75dvh';
 
-    let pendingPhoto = null; // { blob, url }
+    // Multi-photo per meal: dish + nutrition label + receipt all attach to
+    // ONE entry. Pending photos array (was scalar). 'Take Photo' adds one;
+    // 'Library' lets user pick multiple at once. Each added photo shows as
+    // a thumbnail with a remove (×) button.
+    let pendingPhotos = []; // Array<{ blob, url, takenAt }>
 
     sheet.innerHTML = `
       <div class="modal-header">
@@ -379,7 +383,8 @@ const QuickLog = {
           <button class="btn btn-secondary" id="fn-camera" style="flex:1;"><span class="btn-icon">${UI.svg.camera}</span> Take Photo</button>
           <button class="btn btn-ghost" id="fn-library" style="flex:1;"><span class="btn-icon">${UI.svg.gallery || UI.svg.camera}</span> Library</button>
         </div>
-        <div id="fn-photo-area"></div>
+        <p class="form-hint" style="font-size:var(--text-xs); color:var(--text-muted); margin:0 0 var(--space-sm);">Add multiple shots of the same meal (dish + nutrition label + receipt). All photos attach to this ONE entry.</p>
+        <div id="fn-photo-area" class="multi-photo-grid"></div>
       </div>
       <div class="form-group">
         <textarea class="form-input" id="fn-notes" placeholder="What did you eat? (optional if photo added)" rows="2"></textarea>
@@ -391,31 +396,39 @@ const QuickLog = {
     document.body.appendChild(overlay);
 
     const closeModal = () => {
-      if (pendingPhoto) Camera.revokeURL(pendingPhoto.url);
+      for (const p of pendingPhotos) Camera.revokeURL(p.url);
+      pendingPhotos = [];
       overlay.remove();
     };
     document.getElementById('fn-close').addEventListener('click', closeModal);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
 
-    const showPreview = (photo) => {
-      if (pendingPhoto) Camera.revokeURL(pendingPhoto.url);
-      pendingPhoto = photo;
+    const renderThumbs = () => {
       const area = document.getElementById('fn-photo-area');
       if (!area) return;
       area.innerHTML = '';
-      area.appendChild(Camera.createPreview(photo.url, () => {
-        Camera.revokeURL(pendingPhoto.url);
-        pendingPhoto = null;
-      }));
+      pendingPhotos.forEach((photo, idx) => {
+        area.appendChild(Camera.createPreview(photo.url, () => {
+          Camera.revokeURL(photo.url);
+          pendingPhotos.splice(idx, 1);
+          renderThumbs();  // re-render after removal
+        }));
+      });
+    };
+
+    const addPhotos = (photos) => {
+      for (const p of photos) pendingPhotos.push(p);
+      renderThumbs();
     };
 
     document.getElementById('fn-camera').addEventListener('click', async () => {
       const result = await Camera.capture('meal');
-      if (result) showPreview(result);
+      if (result) addPhotos([result]);
     });
     document.getElementById('fn-library').addEventListener('click', async () => {
-      const result = await Camera.pick('meal');
-      if (result) showPreview(result);
+      // Multi-select from library — all picked photos attach to this same entry.
+      const results = await Camera.pickMultiple('meal');
+      if (results && results.length) addPhotos(results);
     });
 
     // Focus textarea and scroll into view when keyboard opens
@@ -431,25 +444,28 @@ const QuickLog = {
     document.getElementById('fn-save').addEventListener('click', async () => {
       if (saving) return;
       const notes = document.getElementById('fn-notes')?.value?.trim() || '';
-      if (!notes && !pendingPhoto) { UI.toast('Add a note or photo', 'error'); return; }
+      if (!notes && pendingPhotos.length === 0) { UI.toast('Add a note or photo', 'error'); return; }
 
       saving = true;
       const date = App.selectedDate;
+      const firstPhoto = pendingPhotos[0];
       const entry = {
         id: UI.generateId('meal'),
         type: 'meal',
         subtype: null,
         date,
-        timestamp: pendingPhoto?.takenAt && pendingPhoto.takenAt.startsWith(date) ? pendingPhoto.takenAt : new Date().toISOString(),
+        timestamp: firstPhoto?.takenAt && firstPhoto.takenAt.startsWith(date) ? firstPhoto.takenAt : new Date().toISOString(),
         notes,
-        photo: !!pendingPhoto,
+        photo: pendingPhotos.length > 0,
         duration_minutes: null,
       };
 
       try {
-        await DB.addEntry(entry, pendingPhoto ? pendingPhoto.blob : null);
-        pendingPhoto = null;
-        UI.toast('Food logged');
+        const blobs = pendingPhotos.map(p => p.blob);
+        await DB.addEntry(entry, blobs.length > 0 ? blobs : null);
+        // Don't revoke URLs — blobs are now in DB; closeModal handles cleanup
+        pendingPhotos = [];  // prevent closeModal from revoking now-stored blobs
+        UI.toast(`Food logged${blobs.length > 1 ? ` (${blobs.length} photos)` : ''}`);
         CloudRelay.queueUpload(date);
         closeModal();
         App.loadDayView();
