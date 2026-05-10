@@ -234,10 +234,37 @@ const Fitness = {
     return exercises;
   },
 
+  // Normalize regimen schema. Synthesis emits at least 4 different shapes:
+  //   { weeklySchedule: [{day, ...}] }                      (camelCase preferred)
+  //   { weekly_schedule: [{day, ...}] }                     (snake_case)
+  //   { weeklyStructure: [...] | {} }                       (yet another)
+  //   { days: [{day | dayOfWeek, ...}] }                    (with dayOfWeek key)
+  // Returns canonical [{day, type, exercises, description, ...}, ...].
+  _normalizeSchedule(regimen) {
+    if (!regimen) return [];
+    const raw = regimen.weeklySchedule
+              || regimen.weekly_schedule
+              || regimen.weeklyStructure
+              || regimen.days
+              || [];
+    if (!Array.isArray(raw)) {
+      // Object-keyed (e.g. {monday: {...}}) — coerce to array
+      if (raw && typeof raw === 'object') {
+        return Object.entries(raw).map(([k, v]) => ({ day: k.toLowerCase(), ...(v || {}) }));
+      }
+      return [];
+    }
+    return raw.map(d => {
+      const day = (d.day || d.dayOfWeek || d.day_of_week || '').toString().toLowerCase();
+      return { ...d, day };
+    });
+  },
+
   // Render the interactive workout checklist (individual exercise cards)
   async render(regimen, date) {
     const dayName = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    const todayPlan = regimen.weeklySchedule?.find(d => d.day === dayName);
+    const schedule = Fitness._normalizeSchedule(regimen);
+    const todayPlan = schedule.find(d => d.day === dayName);
     const isRest = !todayPlan || todayPlan.type === 'rest' || todayPlan.type === 'active_rest' || todayPlan.type === 'active_recovery';
     const notes = await Fitness.getWorkoutNotes(date);
     const checked = await Fitness.getCheckedExercises(date);

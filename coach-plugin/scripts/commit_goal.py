@@ -138,7 +138,10 @@ def _atomic_write(path: Path, data: dict):
 # ── Timeline ──────────────────────────────────────────────────────────────────
 
 def _append_timeline(data_dir: Path, level: str, changed_fields: list[str]):
-    timeline_path = data_dir / "timeline.json"
+    # Convention: profile/timeline.json (parallel to goals.json/preferences.json).
+    # Older code wrote to data_dir/timeline.json which doesn't match production
+    # layout — production has only one timeline file under profile/.
+    timeline_path = data_dir / "profile" / "timeline.json"
     events = []
     if timeline_path.exists():
         try:

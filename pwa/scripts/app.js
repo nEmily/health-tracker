@@ -1134,7 +1134,13 @@ const App = {
     const workoutEl = document.getElementById('today-workout');
     if (workoutEl) {
       try {
-        if (regimen?.weeklySchedule) {
+        // Tolerate any of the regimen schedule shapes (weeklySchedule,
+        // weekly_schedule, weeklyStructure, days). Fitness._normalizeSchedule
+        // returns [] if none present, which means show the empty state.
+        const hasSchedule = regimen && (Fitness._normalizeSchedule
+          ? Fitness._normalizeSchedule(regimen).length > 0
+          : !!regimen.weeklySchedule);
+        if (hasSchedule) {
           const fitnessHtml = await Fitness.render(regimen, date);
           workoutEl.innerHTML = fitnessHtml;
           Fitness.bindEvents(date, workoutEl);
@@ -2075,9 +2081,12 @@ const App = {
     let workoutLabel = 'Workout';
     try {
       const regimen = preloaded?.regimen ?? await DB.getRegimen();
-      if (regimen?.weeklySchedule) {
+      const schedule = regimen ? (Fitness._normalizeSchedule
+        ? Fitness._normalizeSchedule(regimen)
+        : (regimen.weeklySchedule || [])) : [];
+      if (schedule.length > 0) {
         const dayName = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-        const todayPlan = regimen.weeklySchedule?.find(d => d.day === dayName);
+        const todayPlan = schedule.find(d => d.day === dayName);
         const isRest = !todayPlan || todayPlan.type === 'rest' || todayPlan.type === 'active_rest' || todayPlan.type === 'active_recovery';
         if (isRest) {
           workoutLabel = 'Rest Day';

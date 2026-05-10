@@ -86,7 +86,18 @@ const PlanView = {
     }
 
     if (todayPlan.meals) {
-      for (const meal of todayPlan.meals) {
+      // Tolerate two shapes: synthesis emits meals as a dict
+      // {breakfast: {...}, lunch: {...}, ...}, but older fixtures + the
+      // legacy schema used an array of {type, ...} entries. Normalize to
+      // an array so the renderer doesn't blow up on whichever shape arrives.
+      let mealsArr = todayPlan.meals;
+      if (!Array.isArray(mealsArr) && typeof mealsArr === 'object') {
+        mealsArr = Object.entries(mealsArr).map(([type, m]) => ({
+          ...m,
+          type: m.type || type,
+        }));
+      }
+      for (const meal of mealsArr) {
         // Support both old schema (meal.type, meal.calories, meal.ingredients)
         // and current processing schema (meal.time, meal.totals.calories, meal.items)
         const mealType = UI.escapeHtml(meal.type || meal.time || meal.meal || '');
@@ -197,7 +208,11 @@ const PlanView = {
     }
 
     for (const day of (plan.days || [])) {
-      const dayCals = day.day_totals?.calories || (day.meals ? day.meals.reduce((sum, m) => sum + (m.calories || 0), 0) : 0);
+      // Normalize meals to array (synthesis emits dict-keyed-by-meal-type)
+      const mealsArr = Array.isArray(day.meals) ? day.meals
+        : (day.meals && typeof day.meals === 'object' ? Object.values(day.meals) : []);
+      const dayCals = day.day_totals?.calories || day.totals?.calories
+        || mealsArr.reduce((sum, m) => sum + (m.calories || 0), 0);
       html += `<div class="card" style="margin-bottom:var(--space-sm); cursor:pointer;" onclick="App.goToDate('${day.date}')">`;
       html += `<div style="display:flex; justify-content:space-between; align-items:baseline;">
         <span style="font-weight:500;">${UI.formatDate(day.date)}</span>

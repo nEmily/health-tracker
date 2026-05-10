@@ -96,9 +96,49 @@ def _build_synthesis_prompt(
     plan_instruction = ""
     if plan_triggered:
         plan_instruction = (
-            "\nPLAN TRIGGERED: Generate or refresh a 3-day meal plan and weekly workout regimen. "
-            "Set mealPlan.source = 'phase-2-processing'. Each day needs: breakfast, lunch, dinner, snack. "
-            "Each meal needs: name, calories, protein, fat, fiber, prep_time, ingredients[]."
+            "\nPLAN TRIGGERED: Generate or refresh a 3-day meal plan and weekly workout regimen.\n"
+            "\n"
+            "mealPlan SCHEMA (use EXACTLY this shape — no variations):\n"
+            '{\n'
+            '  \"source\": \"phase-2-processing\",\n'
+            '  \"generated\": \"YYYY-MM-DD\",  // ISO date string, NOT epoch ms\n'
+            '  \"days\": [\n'
+            '    {\n'
+            '      \"day\": 1,\n'
+            '      \"date\": \"YYYY-MM-DD\",\n'
+            '      \"totals\": {\"calories\": <int>, \"protein\": <int>, \"fat\": <int>, \"fiber\": <int>},\n'
+            '      \"meals\": {\n'
+            '        \"breakfast\": {\"name\": \"...\", \"calories\": <int>, \"protein\": <int>, \"fat\": <int>, \"fiber\": <int>, \"prep_time\": \"X min\", \"ingredients\": [\"...\"]},\n'
+            '        \"lunch\": {...same shape},\n'
+            '        \"dinner\": {...},\n'
+            '        \"snack\": {...}\n'
+            '      }\n'
+            '    },\n'
+            '    ...3 days total\n'
+            '  ]\n'
+            '}\n'
+            "Use the dict-keyed-by-meal-type shape EXACTLY. Do NOT use a list of meals.\n"
+            "\n"
+            "regimen SCHEMA (use EXACTLY this shape):\n"
+            '{\n'
+            '  \"source\": \"phase-2-processing\",\n'
+            '  \"generated\": \"YYYY-MM-DD\",\n'
+            '  \"phase\": \"<recomp/cut/maintenance>\",\n'
+            '  \"focus\": \"<one-line summary>\",\n'
+            '  \"weeklySchedule\": [\n'
+            '    {\n'
+            '      \"day\": \"monday\",  // lowercase day name\n'
+            '      \"type\": \"strength|cardio|active_recovery|rest\",\n'
+            '      \"focus\": \"...\",\n'
+            '      \"duration_min\": <int>,\n'
+            '      \"description\": \"...\",  // shown on rest days\n'
+            '      \"exercises\": [{\"name\": \"...\", \"sets\": <int>, \"reps\": \"<range>\", \"note\": \"...\"}]\n'
+            '    },\n'
+            '    ...one entry per day of the week (7 entries)\n'
+            '  ]\n'
+            '}\n'
+            "Use camelCase 'weeklySchedule' (NOT weekly_schedule, NOT days, NOT weeklyStructure). "
+            "Day name is lowercase ('monday' not 'Monday' or 'mon')."
         )
     else:
         plan_instruction = "\nPLAN NOT TRIGGERED: Set mealPlan and regimen to null."
@@ -186,10 +226,37 @@ REQUIRED OUTPUT SCHEMA (return this exact JSON structure):
   ],
   "highlights": ["<positive observation, max 120 chars each>"],
   "concerns": ["<actionable concern, max 120 chars each>"],
+  "goalUpdates": null,
   "mealPlan": null,
   "regimen": null,
   "plan_decision_reason": "<fresh-day|coach-session-preserved|not-stale|plan-requested>"
 }}
+
+GOAL UPDATES FROM CHAT:
+If the user EXPLICITLY asks to change a goal in chat (e.g. "bump my
+calories to 1000", "change my protein target to 100g", "set water to 80oz"),
+emit a goalUpdates object alongside your coach response. This is the only
+way coach can persist a goal change from chat — without this, the change
+won't stick.
+
+Schema for goalUpdates (deep-merge patch onto profile/goals.json):
+{{
+  "calories": {{"daily": <int>}},  // for "bump cals to N"
+  "macros": {{
+    "protein": {{"target": <int>}},  // for "set protein to N"
+    "fat": {{"floor": <int>}}
+  }},
+  "water_oz": <int>,                  // for "water target N oz"
+  "fiber": {{"daily_g": <int>}}
+}}
+
+Only include fields the user actually asked to change. If goalUpdates is
+non-null, your coach response should CONFIRM the change (e.g. "Updated --
+calorie target is 1000 going forward") instead of telling the user to go
+to Settings. The orchestrator applies the patch atomically AFTER your
+response is written.
+
+If the user did NOT ask for a goal change, set goalUpdates to null.
 
 RULES:
 {coach_response_rules}
@@ -451,10 +518,14 @@ def _normalize_coach_responses(entries: list) -> list:
 
 
 def _normalize_synthesis(result: dict) -> dict:
+    gu = result.get("goalUpdates")
+    if not isinstance(gu, dict) or not gu:
+        gu = None
     return {
         "coachResponses": _normalize_coach_responses(result.get("coachResponses") or []),
         "highlights": result.get("highlights") or [],
         "concerns": result.get("concerns") or [],
+        "goalUpdates": gu,
         "mealPlan": result.get("mealPlan"),
         "regimen": result.get("regimen"),
         "plan_decision_reason": result.get("plan_decision_reason", ""),

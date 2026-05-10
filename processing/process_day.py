@@ -201,6 +201,35 @@ def main(
         goals_block=goals_block,
     )
 
+    # Apply user-requested goal updates from chat. Synthesis emits
+    # goalUpdates: { ...patch... } when the user explicitly asked to change
+    # a goal (e.g. "bump cals to 1000"). We deep-merge into goals.json
+    # atomically + write a timeline event. After this, recompute goals_block
+    # so the day's targets reflect the new goal.
+    goal_updates = synthesis.get("goalUpdates") if isinstance(synthesis, dict) else None
+    if goal_updates and not dry_run:
+        try:
+            # commit_goal lives in coach-plugin/scripts (interactive helper).
+            # Add it to the import path for cron use.
+            import sys as _sys
+            plugin_scripts = data_dir.parent / "coach-plugin" / "scripts"
+            # Try the project path first, then fall back to sibling layout
+            for candidate in [
+                Path(__file__).resolve().parent.parent.parent / "coach-plugin" / "scripts",
+                plugin_scripts,
+            ]:
+                if (candidate / "commit_goal.py").exists():
+                    _sys.path.insert(0, str(candidate))
+                    break
+            from commit_goal import commit_goal as _commit_goal
+            _commit_goal(goal_updates, data_dir)
+            print(f"[process_day] Applied goalUpdates from chat: {list(goal_updates.keys())}", flush=True)
+            # Reload profile so goals_block reflects the new values
+            profile = load_profile(data_dir, extract_dir)
+            goals_block = compute_goals_block(totals, profile)
+        except Exception as exc:
+            print(f"[process_day] WARN: goalUpdates apply failed: {exc}", flush=True)
+
     # ── ASSEMBLE OUTPUT ───────────────────────────────────────────────────────
     output = _assemble_analysis(
         date=date,

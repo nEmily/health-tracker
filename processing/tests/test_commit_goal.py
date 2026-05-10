@@ -155,7 +155,7 @@ def test_commit_goal_writes_timeline_event(tmp_path):
     data_dir = _make_goals_dir(tmp_path)
     commit_goal({"calories": {"daily": 900}}, data_dir)  # major change
 
-    timeline = json.loads((data_dir / "timeline.json").read_text())
+    timeline = json.loads((data_dir / "profile" / "timeline.json").read_text())
     assert len(timeline) >= 1
     event = timeline[-1]
     assert event["type"] == "goal_update"
@@ -167,7 +167,7 @@ def test_commit_goal_timeline_level_minor(tmp_path):
     data_dir = _make_goals_dir(tmp_path)
     commit_goal({"water": {"daily_oz": 80}}, data_dir)
 
-    timeline = json.loads((data_dir / "timeline.json").read_text())
+    timeline = json.loads((data_dir / "profile" / "timeline.json").read_text())
     assert timeline[-1]["level"] == "minor"
 
 
@@ -175,18 +175,18 @@ def test_commit_goal_timeline_level_note(tmp_path):
     data_dir = _make_goals_dir(tmp_path)
     commit_goal({"notes": "Updated manually"}, data_dir)
 
-    timeline = json.loads((data_dir / "timeline.json").read_text())
+    timeline = json.loads((data_dir / "profile" / "timeline.json").read_text())
     assert timeline[-1]["level"] == "note"
 
 
 def test_commit_goal_appends_to_existing_timeline(tmp_path):
     data_dir = _make_goals_dir(tmp_path)
     existing_events = [{"type": "existing_event", "timestamp": "2026-01-01T00:00:00+00:00"}]
-    (data_dir / "timeline.json").write_text(json.dumps(existing_events))
+    (data_dir / "profile" / "timeline.json").write_text(json.dumps(existing_events))
 
     commit_goal({"notes": "patch"}, data_dir)
 
-    timeline = json.loads((data_dir / "timeline.json").read_text())
+    timeline = json.loads((data_dir / "profile" / "timeline.json").read_text())
     assert len(timeline) == 2
     assert timeline[0]["type"] == "existing_event"
     assert timeline[1]["type"] == "goal_update"

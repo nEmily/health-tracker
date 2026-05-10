@@ -205,7 +205,10 @@ const ProgressView = {
         const dayLabel = new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
         html += `<div style="font-weight:600; font-size:var(--text-sm); margin-bottom:var(--space-xs);">${dayLabel}</div>`;
         if (day.meals) {
-          for (const m of day.meals) {
+          // Normalize meals dict -> array (synthesis emits {breakfast: ..., lunch: ...})
+          const mealsArr = Array.isArray(day.meals) ? day.meals
+            : Object.entries(day.meals).map(([type, m]) => ({ ...m, type: m.type || type }));
+          for (const m of mealsArr) {
             const ingredientsHtml = UI.renderIngredientList(m.ingredients);
             const fiberText = m.fiber ? ` - ${m.fiber}g F` : '';
             html += `<div style="padding:4px 0;">
