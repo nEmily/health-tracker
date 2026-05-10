@@ -166,7 +166,7 @@ const Log = {
         <button class="btn btn-secondary" id="log-photo-capture"><span class="btn-icon">${UI.svg.camera}</span> Take Photo</button>
         <button class="btn btn-ghost" id="log-photo-pick"><span class="btn-icon">${UI.svg.gallery}</span> Add Photos</button>
       </div>
-      <p class="form-hint" style="font-size:var(--text-xs); color:var(--text-muted); margin:4px 0 0;">Tap "Add Photos" to attach multiple pics (dish + label + receipt) to this single entry. Tap "Take Photo" again to add another.</p>
+      <p class="form-hint" style="font-size:var(--text-xs); color:var(--text-muted); margin:4px 0 0;">Multiple photos attach to this one entry. Take or pick again to add more.</p>
       <div id="log-photo-preview-area" class="multi-photo-grid"></div>
     `;
 

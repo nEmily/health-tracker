@@ -623,17 +623,24 @@ const UI = {
     const addPhotoPickBtn = document.getElementById('edit-add-photo-pick');
 
     const handleAddPhotoToEntry = async (useCamera) => {
-      const result = useCamera ? await Camera.capture('meal') : await Camera.pick('meal');
-      if (!result) return;
+      // Camera = single shot; Library = multi-select (consistency with Log Food).
+      const results = useCamera
+        ? [await Camera.capture('meal')].filter(Boolean)
+        : await Camera.pickMultiple('meal');
+      if (!results || results.length === 0) return;
 
       try {
-        const totalPhotos = await DB.addPhotosToEntry(entry.id, [result.blob], entry);
+        const blobs = results.map(r => r.blob);
+        const totalPhotos = await DB.addPhotosToEntry(entry.id, blobs, entry);
         // Update entry.photo flag in-memory for consistency
         entry.photo = true;
 
-        // Add the new photo URL to tracking array
-        const newUrl = URL.createObjectURL(result.blob);
-        photoUrls.push(newUrl);
+        // Add the new photo URLs to tracking array
+        const newUrls = results.map(r => URL.createObjectURL(r.blob));
+        for (const u of newUrls) photoUrls.push(u);
+        // For single-photo path, alias for downstream code that references
+        // `newUrl` (legacy variable shape).
+        const newUrl = newUrls[0];
 
         // Update photo count display
         const countEl = document.getElementById('edit-photo-count');
