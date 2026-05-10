@@ -36,6 +36,7 @@ def append(
     data_dir: Path,
     coach_messages: list[dict],
     coach_responses: list[dict],
+    date: str | None = None,
 ) -> None:
     """Append message+response pairs to data_dir/conversations.md.
 
@@ -43,13 +44,20 @@ def append(
         data_dir:        Path to the user's coach data directory.
         coach_messages:  List of user messages (each has at least 'text' and optionally 'timestamp').
         coach_responses: List of response dicts (each has 'replyTo', 'text', 'timestamp').
+        date:            ISO YYYY-MM-DD of the day being processed. If None,
+                         defaults to today (Pacific). MUST be passed by
+                         process_day so reprocessing an old date appends to
+                         that date's section, not today's.
     """
     if not coach_messages and not coach_responses:
         return
 
     conversations_path = data_dir / "conversations.md"
-    today_pt = _pt_now()
-    date_str = f"{today_pt.year}-{today_pt.month:02d}-{today_pt.day:02d}"
+    if date and re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        date_str = date
+    else:
+        today_pt = _pt_now()
+        date_str = f"{today_pt.year}-{today_pt.month:02d}-{today_pt.day:02d}"
     date_header = f"## {date_str}"
 
     # Build response lookup keyed by user message ID. Each response can
@@ -68,6 +76,35 @@ def append(
         for mid in target_ids:
             responses_by_msg_id.setdefault(mid, []).append(resp)
 
+    # Read existing content first so we can dedup against it.
+    # Without this, every cron tick re-appends ALL chat for the day —
+    # 5/4 conversations.md grew to 58 duplicate user messages from 8
+    # unique ones because dedup was missing.
+    existing_content = ""
+    if conversations_path.exists():
+        existing_content = conversations_path.read_text(encoding="utf-8")
+
+    def _already_present(line: str) -> bool:
+        """Has this exact line (text portion) already been written?
+        Match by the trailing text after the timestamp, not the full line —
+        timestamps may differ across runs (server-overridden coach response
+        ts) but content is the truth.
+        """
+        # Extract the post-": " content
+        m = re.match(r"^\*\*(?:User|Coach)\*\*\s+\([^)]+\):\s*(.+)$", line)
+        if not m:
+            return line in existing_content
+        text = m.group(1).strip()
+        if not text:
+            return False
+        # Look for any line in existing with same role + same text
+        role = "User" if line.startswith("**User**") else "Coach"
+        pattern = re.compile(
+            rf"\*\*{role}\*\*\s+\([^)]+\):\s*{re.escape(text)}\s*$",
+            re.MULTILINE,
+        )
+        return bool(pattern.search(existing_content))
+
     # Build new lines to append
     new_lines: list[str] = []
 
@@ -78,7 +115,11 @@ def append(
 
         msg_id = msg.get("id") or ""
         msg_ts = _format_timestamp(_extract_dt(msg.get("timestamp")))
-        new_lines.append(f"**User** ({msg_ts}): {msg_text}")
+        user_line = f"**User** ({msg_ts}): {msg_text}"
+        added_user = False
+        if not _already_present(user_line):
+            new_lines.append(user_line)
+            added_user = True
 
         # Append every coach response that targeted this message id (preserves
         # batched responses and multi-target responses). De-dup so a response
@@ -89,10 +130,15 @@ def append(
                 continue
             used_response_ids.add(rid)
             resp_text = (resp.get("text") or "").strip()
+            if not resp_text:
+                continue
             resp_ts = _format_timestamp(_extract_dt(resp.get("timestamp")))
-            new_lines.append(f"**Coach** ({resp_ts}): {resp_text}")
+            coach_line = f"**Coach** ({resp_ts}): {resp_text}"
+            if not _already_present(coach_line):
+                new_lines.append(coach_line)
 
-        new_lines.append("")  # blank line separator
+        if added_user:
+            new_lines.append("")  # blank line separator
 
     # Append any unsolicited coach responses (highlights/observations not tied
     # to a user message) at the END of the day's section, unless already used.
@@ -108,17 +154,15 @@ def append(
         if not resp_text:
             continue
         resp_ts = _format_timestamp(_extract_dt(resp.get("timestamp")))
-        new_lines.append(f"**Coach** ({resp_ts}): {resp_text}")
-        new_lines.append("")
+        line = f"**Coach** ({resp_ts}): {resp_text}"
+        if not _already_present(line):
+            new_lines.append(line)
+            new_lines.append("")
 
     if not new_lines:
         return
 
-    # Read existing content
-    existing_content = ""
-    if conversations_path.exists():
-        existing_content = conversations_path.read_text(encoding="utf-8")
-
+    # existing_content was already read above for dedup; reuse.
     # Check if date header already exists
     header_pattern = re.compile(rf'^{re.escape(date_header)}\s*$', re.MULTILINE)
 

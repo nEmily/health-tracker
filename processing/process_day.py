@@ -225,18 +225,22 @@ def main(
     existing_responses: list[dict] = []
     if existing_analysis:
         existing_responses = list(existing_analysis.get("coachResponses") or [])
-    try:
-        from lib.restore_chat_history import load_coach_responses_for_date
-        from_md = load_coach_responses_for_date(data_dir, date)
-        if from_md:
-            # De-dup by hashing text — entries already in existing_responses
-            # are kept verbatim; conversations.md ones fill any gaps.
-            have_texts = {(r.get("text") or "").strip() for r in existing_responses}
-            for r in from_md:
-                if (r.get("text") or "").strip() not in have_texts:
-                    existing_responses.append(r)
-    except Exception as exc:
-        print(f"[process_day] WARN: conversations.md restore failed: {exc}", flush=True)
+    # Only fall back to conversations.md if the analysis JSON has no
+    # responses (file missing or wiped). Otherwise the analysis is the
+    # truth and we don't want to re-inject older variants from conv.md
+    # that might have accumulated across many synth runs.
+    if not existing_responses:
+        try:
+            from lib.restore_chat_history import load_coach_responses_for_date
+            existing_responses = list(load_coach_responses_for_date(data_dir, date))
+            if existing_responses:
+                print(
+                    f"[process_day] Restored {len(existing_responses)} responses from conversations.md "
+                    f"(analysis JSON had none for {date})",
+                    flush=True,
+                )
+        except Exception as exc:
+            print(f"[process_day] WARN: conversations.md restore failed: {exc}", flush=True)
 
     if existing_responses:
         output["coachResponses"] = _merge_coach_responses(
@@ -262,7 +266,10 @@ def main(
         append_conversations(
             data_dir,
             (log_data.get("coachChat") or []),
-            synthesis["coachResponses"],
+            output["coachResponses"],  # use merged list (existing + new)
+            date=date,                  # CRITICAL: append to the day being
+                                        # processed, not "today" — fixes
+                                        # reprocess-old-date misrouting.
         )
     else:
         print("[process_day] DRY RUN — no files written", flush=True)
