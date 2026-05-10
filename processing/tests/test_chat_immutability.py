@@ -6,8 +6,71 @@ from process_day import _merge_coach_responses
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _resp(id_: str, text: str, timestamp: int = 1000) -> dict:
-    return {"id": id_, "timestamp": timestamp, "respondsTo": [], "text": text}
+def _resp(id_: str, text: str, timestamp: int = 1000, responds_to=None) -> dict:
+    return {
+        "id": id_, "timestamp": timestamp,
+        "respondsTo": responds_to or [],
+        "text": text,
+    }
+
+
+# ── New harder rule: drop new responses whose targets are already answered ──
+
+def test_drop_new_response_to_already_answered_message():
+    """If existing already answered msg X, a new response targeting X is
+    dropped (not appended). Prevents duplicate-response storms when a later
+    cron run incorrectly thinks X is unanswered.
+
+    Per CLAUDE.md #9: never rewrite history. The user has already read the
+    existing answer to X.
+    """
+    existing = [_resp("orig_a", "First answer to X", responds_to=["msg_x"])]
+    new = [_resp("new_b", "Different attempt to answer X", responds_to=["msg_x"])]
+    merged = _merge_coach_responses(existing, new)
+    assert len(merged) == 1
+    assert merged[0]["id"] == "orig_a"
+    assert "First answer" in merged[0]["text"]
+
+
+def test_drop_when_all_targets_already_answered_in_batched_response():
+    """If existing has a batched response covering [x, y, z], a new
+    individual response targeting x is dropped. Same for y or z."""
+    existing = [_resp("orig_batched", "Batched", responds_to=["x", "y", "z"])]
+    new = [
+        _resp("dup_x", "to x", responds_to=["x"]),
+        _resp("dup_y", "to y", responds_to=["y"]),
+    ]
+    merged = _merge_coach_responses(existing, new)
+    assert len(merged) == 1
+    assert merged[0]["id"] == "orig_batched"
+
+
+def test_keep_new_response_targeting_genuinely_new_message():
+    """New response covering a message NOT yet answered is appended."""
+    existing = [_resp("orig", "to x", responds_to=["x"])]
+    new = [_resp("new_resp", "to y", responds_to=["y"])]
+    merged = _merge_coach_responses(existing, new)
+    assert len(merged) == 2
+    assert {r["id"] for r in merged} == {"orig", "new_resp"}
+
+
+def test_keep_partial_new_target_set():
+    """Edge case: new response targets [x, y] where x is already answered
+    but y is not. Currently we drop ONLY if ALL targets are already
+    answered. This response covers a new target, so keep it."""
+    existing = [_resp("orig", "to x", responds_to=["x"])]
+    new = [_resp("new", "to x and y", responds_to=["x", "y"])]
+    merged = _merge_coach_responses(existing, new)
+    assert len(merged) == 2  # both kept
+
+
+def test_legacy_replyto_scalar_treated_same_as_respondsTo():
+    """Old responses use replyTo scalar; should still register as already-answered."""
+    existing = [{"id": "old", "text": "old", "replyTo": "x"}]
+    new = [_resp("new", "duplicate to x", responds_to=["x"])]
+    merged = _merge_coach_responses(existing, new)
+    assert len(merged) == 1
+    assert merged[0]["id"] == "old"
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────

@@ -610,15 +610,43 @@ def _compute_unanswered(
 def _merge_coach_responses(existing: list[dict], new: list[dict]) -> list[dict]:
     """Merge new coach responses while preserving all existing ones.
 
-    Existing entries are never modified or removed (append-only).
-    New entries with IDs already in existing are dropped in favor of the existing copy.
+    Hard rules (CLAUDE.md Key Principles #8 and #9):
+      - Existing entries are NEVER modified, removed, or rewritten. Once a
+        response was synced to the phone, the user has read it; any later
+        edit is rewriting history she remembers.
+      - New entries that try to respond to a message id ALREADY answered by
+        an existing response are dropped (not appended). Otherwise we end
+        up with N coach responses to the same user message — the
+        duplicate-response bug class.
+      - Only genuinely-new responses (covering at least one msg id NOT yet
+        answered) are appended.
     """
+    # Build set of msg ids already answered by existing responses
+    answered_msg_ids: set[str] = set()
+    for r in existing:
+        rt = r.get("respondsTo")
+        if isinstance(rt, list):
+            answered_msg_ids.update(x for x in rt if x)
+        elif r.get("replyTo"):
+            answered_msg_ids.add(r["replyTo"])
+
     existing_ids = {r["id"] for r in existing if "id" in r}
     merged = list(existing)
     for resp in new:
         rid = resp.get("id")
-        if rid is None or rid not in existing_ids:
-            merged.append(resp)
+        # Drop if same response id already exists (idempotency)
+        if rid is not None and rid in existing_ids:
+            continue
+        # Drop if every message this response targets has already been
+        # answered by some existing response. Without this guard, repeated
+        # synth runs that incorrectly treat already-answered messages as
+        # "unanswered" produce duplicate-response storms.
+        new_targets = resp.get("respondsTo") or (
+            [resp["replyTo"]] if resp.get("replyTo") else []
+        )
+        if new_targets and all(t in answered_msg_ids for t in new_targets):
+            continue
+        merged.append(resp)
     return merged
 
 
