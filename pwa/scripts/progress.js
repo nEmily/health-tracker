@@ -123,9 +123,12 @@ const ProgressView = {
       Challenges.bindEvents(container);
     }
 
-    // Wire fitness sort buttons
+    // Wire fitness sort buttons.
+    // (Selector previously read '.fitness-sort-btn' but the HTML uses
+    // '.fh-sort-btn' — silent wiring failure meant Category / By Day /
+    // Overdue clicks did nothing for users.)
     if (activeTab === 'fitness') {
-      container.querySelectorAll('.fitness-sort-btn').forEach(btn => {
+      container.querySelectorAll('.fh-sort-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           ProgressView._fitnessSort = btn.dataset.sort;
           ProgressView.init();
@@ -145,7 +148,12 @@ const ProgressView = {
   async renderInsights() {
     const today = UI.today();
     const goals = await DB.getProfile('goals') || {};
-    let analysis = await DB.getAnalysis(today);
+    // Honor the user's selected date if they navigated to a past day on
+    // Today. Falls back to today, then yesterday, so a user with no
+    // analysis for the current day still sees their most recent data.
+    const selected = (typeof App !== 'undefined' && App.selectedDate) ? App.selectedDate : today;
+    let analysis = await DB.getAnalysis(selected);
+    if (!analysis && selected !== today) analysis = await DB.getAnalysis(today);
     if (!analysis) analysis = await DB.getAnalysis(UI.yesterday(today));
 
     let html = '';
@@ -1016,11 +1024,21 @@ const ProgressView = {
   // Format completed sets into a readable summary e.g. "3×8 @ 25 lbs" or "3×10"
   _formatSetsSummary(doneSets) {
     if (!doneSets.length) return '—';
+    // Special-case: synthetic single set with a string label like 'walk',
+    // '10k steps', '...'. Those are placeholder markers from live-fallback
+    // entries pre-cron — render the label directly instead of '1×...'.
+    if (doneSets.length === 1 && typeof doneSets[0].reps === 'string' && isNaN(parseInt(doneSets[0].reps, 10))) {
+      return doneSets[0].reps;
+    }
     const weights = doneSets.map(s => s.weight).filter(Boolean);
-    const reps = doneSets.map(s => s.reps).filter(r => r > 0);
+    const reps = doneSets.map(s => s.reps).filter(r => typeof r === 'number' && r > 0);
     const setCount = doneSets.length;
     const avgReps = reps.length ? Math.round(reps.reduce((a, b) => a + b, 0) / reps.length) : null;
     const maxWeight = weights.length ? Math.max(...weights) : null;
+
+    // Pending-sync rows had every set's reps='...' (no numeric reps).
+    // Render as "logged" instead of "1×?" which looked like incomplete data.
+    if (avgReps == null && doneSets.some(s => s.reps === '...')) return 'logged';
 
     let summary = `${setCount}×${avgReps ?? '?'}`;
     if (maxWeight) summary += ` @ ${maxWeight} lbs`;

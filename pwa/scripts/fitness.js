@@ -380,8 +380,13 @@ const Fitness = {
     const exercises = Fitness.getExerciseList(todayPlan);
     let html = '';
 
-    // Lazy indicator — show if 3+ days without a completed workout
-    if (daysOut >= 3) {
+    // Lazy indicator — show if 3+ days without a completed workout AND
+    // the user hasn't checked anything off yet today. Lecturing about
+    // missed workouts on a day that already has the workout in front of
+    // her is confusing — she's about to do it. Once she starts checking
+    // sets the banner is also irrelevant, hide it then too.
+    const checkedToday = checked && checked.size > 0;
+    if (daysOut >= 3 && !checkedToday) {
       html += `
         <div class="fitness-lazy-banner">
           ${daysOut === 7 ? '7+ days' : `${daysOut} days`} since your last workout. No more rest.

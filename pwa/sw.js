@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v247-global-escape-empty-state-cleanup';
+const CACHE_NAME = 'coach-v248-sort-selectors-selected-date-banner';
 
 const ASSETS = [
   './',

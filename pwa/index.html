@@ -338,7 +338,16 @@
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (reloaded) return;
         reloaded = true;
-        // New SW took over — prompt user instead of auto-reloading
+        // New SW took over — prompt user instead of auto-reloading.
+        // BUT: suppress for brand-new users who haven't onboarded yet.
+        // Showing 'Update available' on the welcome screen makes a fresh
+        // install feel broken / outdated. Auto-reload silently in that
+        // case so they see the latest welcome flow immediately.
+        const onboarded = localStorage.getItem('coach-onboarded') === '1';
+        if (!onboarded) {
+          window.location.reload();
+          return;
+        }
         UI.toast('Update available', 'info', {
           action: 'Refresh',
           onAction: () => window.location.reload(),
