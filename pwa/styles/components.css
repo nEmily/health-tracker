@@ -639,12 +639,60 @@
 }
 
 /* Fitness History tab */
+/* Activity strip header: total counts + legend pills */
+.fh-strip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: 0 var(--space-xs);
+}
+
+.fh-strip-summary {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.fh-strip-counts {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.fh-count-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fh-count-pill::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.fh-count-strength { color: var(--accent-green); border-color: var(--accent-green); }
+.fh-count-strength::before { background: var(--accent-green); }
+
+.fh-count-cardio { color: var(--accent-primary); border-color: var(--accent-primary); }
+.fh-count-cardio::before { background: var(--accent-primary); border-radius: 0; width: 6px; height: 2px; }
+
 .fh-strip {
   display: flex;
-  gap: var(--space-sm);
+  gap: 4px;
   justify-content: space-between;
   margin-bottom: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-xs);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -658,15 +706,55 @@
   flex: 1;
 }
 
+/* Activity-strip per-day marker:
+   - filled square = gym/strength
+   - thin dash     = cardio/walk
+   - hollow dot    = nothing logged
+   - both: stacked square on top of dash */
+.fh-strip-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 16px;
+  justify-content: center;
+}
+
+.fh-mark-strength {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px rgba(45, 212, 191, 0.4);
+}
+
+.fh-mark-cardio {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-primary);
+}
+
+.fh-mark-empty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: transparent;
+}
+
+/* Legacy single-dot fallback (in case any old code still emits .fh-strip-dot) */
 .fh-strip-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: var(--border-color);
 }
+.fh-strip-day.worked-out .fh-strip-dot { background: var(--accent-green); }
 
-.fh-strip-day.worked-out .fh-strip-dot {
-  background: var(--accent-green);
+.fh-strip-day.is-today .fh-strip-label {
+  color: var(--accent-primary);
+  font-weight: 700;
 }
 
 .fh-strip-label {
