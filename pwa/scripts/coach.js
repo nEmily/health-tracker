@@ -202,23 +202,22 @@ const CoachChat = {
     const sendBtn = document.getElementById('coach-send');
     const loadOlder = document.getElementById('coach-load-older');
 
-    // Load older messages — extend the rendered window
+    // Load older messages — extend window. Scroll to the TOP after so the
+    // user actually sees the newly-loaded older content (a "preserve scroll
+    // position" approach was technically correct but visually nothing seemed
+    // to change, which felt broken).
     if (loadOlder) {
       loadOlder.addEventListener('click', async () => {
         CoachChat._windowDays += CoachChat._LOAD_MORE_DAYS;
         const container = document.getElementById('coach-inbox');
         if (container) {
-          // Preserve approximate scroll position by capturing the first
-          // visible element's offsetTop before re-render
-          const messagesBefore = document.getElementById('coach-messages');
-          const scrollHeightBefore = messagesBefore?.scrollHeight || 0;
           container.innerHTML = await CoachChat.render();
           CoachChat.bindEvents();
           const messages = document.getElementById('coach-messages');
           if (messages) {
-            // Scroll to keep the user's previous viewport in roughly the
-            // same content position — new content prepended on top
-            messages.scrollTop = messages.scrollHeight - scrollHeightBefore;
+            // Show the newly-prepended older content; user can scroll down
+            // to get back to recent.
+            messages.scrollTop = 0;
           }
         }
       });

@@ -2843,10 +2843,12 @@ input[type="range"]::-webkit-slider-thumb {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  /* Continuous-history chat: take most of the available viewport so the
-     user can scroll through days of conversation. Subtract: header (~60px),
-     bottom nav (~80px), and a little padding (~24px). */
-  height: calc(100vh - 164px);
+  /* Continuous-history chat: fill the viewport between the brand header
+     above and the bottom-nav below. Use 100dvh (dynamic viewport height)
+     so iOS Safari's address-bar collapse doesn't reveal content behind
+     the bottom nav. Subtract: brand header (~52px), bottom nav (~76px),
+     screen padding (~16px top + 16px bottom + safe-area). */
+  height: calc(100dvh - 160px - env(safe-area-inset-bottom, 0px));
   min-height: 400px;
 }
 
