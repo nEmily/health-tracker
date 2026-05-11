@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v242-fitness-llm-parser-not-regex';
+const CACHE_NAME = 'coach-v243-day-analysis-card-restored-and-fitness-crash-fixed';
 
 const ASSETS = [
   './',

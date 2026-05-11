@@ -141,6 +141,11 @@ const ProgressView = {
 
     let html = '';
 
+    // Per-day analysis card — totals + highlights + concerns. This was the
+    // big-picture card that used to live on the Chat tab below the chat
+    // history; it moved here when Chat became chat-only.
+    html += ProgressView._renderDayAnalysisCard(analysis, goals);
+
     // Adaptive calorie target suggestion (top of Insights)
     html += await ProgressView._renderAdaptiveSuggestion(goals);
 
@@ -234,14 +239,10 @@ const ProgressView = {
       }
     }
 
-    // Highlights from recent analysis
-    if (analysis?.highlights?.length) {
-      html += '<h2 class="section-header">Highlights</h2><div class="card">';
-      for (const h of analysis.highlights) {
-        html += `<div style="font-size:var(--text-sm); color:var(--accent-green); margin-bottom:4px;">&#10003; ${UI.escapeHtml(h)}</div>`;
-      }
-      html += '</div>';
-    }
+    // Highlights / concerns are now rendered at the top of the page inside
+    // the per-day analysis card (_renderDayAnalysisCard). The duplicate
+    // bottom-of-page Highlights block was removed when the card moved here
+    // from the old Chat tab.
 
     if (!html) {
       html = `<div class="card" style="text-align:center; padding:var(--space-lg); color:var(--text-muted);">
@@ -249,6 +250,86 @@ const ProgressView = {
       </div>`;
     }
 
+    return html;
+  },
+
+  // Per-day analysis card: shows calories, macros, highlights, concerns
+  // for the most recent day with data. This card used to live below the
+  // Chat tab; it moved here when Chat became chat-only.
+  _renderDayAnalysisCard(analysis, goals) {
+    if (!analysis) {
+      return `<div class="card" style="text-align:center; padding:var(--space-lg); color:var(--text-muted); margin-bottom:var(--space-md);">
+        <div style="font-size:var(--text-sm);">No analysis yet -- log meals and your coach will process them.</div>
+      </div>`;
+    }
+    const totals = analysis.totals || {};
+    const goalsR = (typeof Goals !== 'undefined' && Goals.resolve) ? Goals.resolve(goals) : {};
+    const calT = goalsR.calories || 0;
+    const proT = goalsR.protein || 0;
+    const cal = Math.round(totals.calories || 0);
+    const protein = Math.round(totals.protein || 0);
+    const fat = Math.round(totals.fat || 0);
+    const fiber = Math.round(totals.fiber || 0);
+    const carbs = Math.round(totals.carbs || 0);
+    const isToday = analysis.date === UI.today();
+    const labelDate = isToday ? 'Today' : (analysis.date === UI.yesterday(UI.today()) ? 'Yesterday' : (() => {
+      const d = new Date(analysis.date + 'T12:00:00');
+      return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    })());
+
+    // Delta-vs-goal indicator on calories. Over = red, near = green, way-under = orange.
+    let calClass = 'var(--text-secondary)';
+    if (calT > 0) {
+      const ratio = cal / calT;
+      if (ratio > 1.10) calClass = 'var(--accent-orange)';
+      else if (ratio >= 0.85) calClass = 'var(--accent-green)';
+      else calClass = 'var(--text-muted)';
+    }
+
+    let html = '<h2 class="section-header" style="margin-top:0;">' + UI.escapeHtml(labelDate) + '</h2>';
+    html += '<div class="card" style="padding:var(--space-md); margin-bottom:var(--space-md);">';
+
+    // Big calorie line
+    html += `<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:var(--space-sm);">
+      <div>
+        <span style="font-size:var(--text-2xl); font-weight:700; color:${calClass};">${cal}</span>
+        ${calT ? `<span style="font-size:var(--text-sm); color:var(--text-muted); margin-left:6px;">/ ${calT} cal</span>` : '<span style="font-size:var(--text-sm); color:var(--text-muted); margin-left:6px;">cal</span>'}
+      </div>
+      ${calT ? `<div style="font-size:var(--text-xs); color:var(--text-muted);">${cal - calT >= 0 ? '+' : ''}${cal - calT}</div>` : ''}
+    </div>`;
+
+    // Macro grid: protein / fat / fiber / carbs
+    html += '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:var(--space-xs); text-align:center; border-top:1px solid var(--border-color); padding-top:var(--space-sm);">';
+    const macroCell = (label, val, suffix, target, accent) => `
+      <div>
+        <div style="font-size:var(--text-base); font-weight:600; color:${accent};">${val}${suffix}</div>
+        <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">${label}${target ? ` / ${target}` : ''}</div>
+      </div>`;
+    html += macroCell('Protein', protein, 'g', proT || '', proT && protein >= proT * 0.85 ? 'var(--accent-green)' : 'var(--text-secondary)');
+    html += macroCell('Fat', fat, 'g', '', 'var(--text-secondary)');
+    html += macroCell('Fiber', fiber, 'g', '', 'var(--text-secondary)');
+    html += macroCell('Carbs', carbs, 'g', '', 'var(--text-secondary)');
+    html += '</div>';
+
+    // Highlights (green checks)
+    if (Array.isArray(analysis.highlights) && analysis.highlights.length) {
+      html += '<div style="margin-top:var(--space-sm); padding-top:var(--space-sm); border-top:1px solid var(--border-color);">';
+      for (const h of analysis.highlights) {
+        html += `<div style="font-size:var(--text-sm); color:var(--accent-green); margin-bottom:4px; display:flex; gap:6px;"><span>&#10003;</span><span>${UI.escapeHtml(h)}</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    // Concerns (orange flag)
+    if (Array.isArray(analysis.concerns) && analysis.concerns.length) {
+      html += '<div style="margin-top:var(--space-sm); padding-top:var(--space-sm); border-top:1px solid var(--border-color);">';
+      for (const c of analysis.concerns) {
+        html += `<div style="font-size:var(--text-sm); color:var(--accent-orange); margin-bottom:4px; display:flex; gap:6px;"><span>!</span><span>${UI.escapeHtml(c)}</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
     return html;
   },
 
@@ -663,9 +744,9 @@ const ProgressView = {
       }
 
       // Source 3 (live fallback): workout entries with no structure yet.
-      // Surface them so the strip shows ''yes I worked out'' even pre-cron.
+      // Surface them so the strip shows "yes I worked out" even pre-cron.
       const workouts = (summary.entries || []).filter(e => e.type === 'workout');
-      if (workouts.length && !dayMeta[summary.date].hasParsed) {
+      if (workouts.length && !dayMeta[summary.date]?.hasParsed) {
         const subtype = (workouts[0].subtype || '').toLowerCase().includes('cardio') ? 'cardio' : 'strength';
         markDay(summary.date, subtype);
         const key = subtype === 'cardio' ? 'Walk / cardio session' : 'Workout (pending sync)';
@@ -677,6 +758,28 @@ const ProgressView = {
           _source: 'live',
           _pending: true,
         });
+      }
+
+      // Source 4 (live fallback): fitness_notes present on a day that has
+      // no analysis.fitness yet — the notes haven't been LLM-structured
+      // because the cron hasn't run for this day yet. We can't pull exercise
+      // breakdown without re-introducing a JS parser (which we explicitly
+      // moved to the LLM), but we CAN still mark the day on the activity
+      // strip so the user sees it as a strength day.
+      if (summary.fitness_notes && summary.fitness_notes.trim() && !dayMeta[summary.date]?.hasParsed) {
+        markDay(summary.date, 'strength');
+        const key = 'Workout (pending sync)';
+        if (!map[key]) map[key] = [];
+        // Avoid duplicating if Source 3 already added a pending entry
+        if (!map[key].some(s => s.date === summary.date && s._pending)) {
+          map[key].push({
+            date: summary.date,
+            sets: [{ reps: '...', done: true }],
+            _subtype: 'strength',
+            _source: 'live-notes',
+            _pending: true,
+          });
+        }
       }
     }
 
