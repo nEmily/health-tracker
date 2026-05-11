@@ -53,7 +53,7 @@ async function gotoFitnessOnDate(page, date) {
 
   // ── BUG A: optionalBonus[] never rendered ────────────────────────────
   console.log('\n══ A. optionalBonus exercises rendered on a strength day? ══');
-  await gotoFitnessOnDate(page, '2026-05-11'); // Monday = Day A
+  await gotoFitnessOnDate(page, '2026-05-12'); // Monday = Day A
   const panelState = await page.evaluate(() => {
     const p = document.getElementById('panel-fitness');
     return {
@@ -204,7 +204,7 @@ async function gotoFitnessOnDate(page, date) {
   console.log(`  exercise cards rendered on rest day: ${restState.hasExercises}`);
 
   await page.screenshot({ path: 'pwa/tests/screenshots/qa-fitness-panel-monday.png', fullPage: false });
-  await gotoFitnessOnDate(page, '2026-05-11');
+  await gotoFitnessOnDate(page, '2026-05-12');
   await page.screenshot({ path: 'pwa/tests/screenshots/qa-fitness-panel-monday-full.png', fullPage: true });
 
   if (errs.length) {
