@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v234-plan-targets-fitness-notes-history';
+const CACHE_NAME = 'coach-v235-psyllium-fiber-and-flimeal-known';
 
 const ASSETS = [
   './',
