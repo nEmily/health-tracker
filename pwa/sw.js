@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v236-chat-tab-continuous-history';
+const CACHE_NAME = 'coach-v237-chat-scroll-fixes';
 
 const ASSETS = [
   './',
