@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v245-fiber-split-row-soluble-vs-insoluble';
+const CACHE_NAME = 'coach-v246-streaks-water-and-regimen-phase-focus';
 
 const ASSETS = [
   './',

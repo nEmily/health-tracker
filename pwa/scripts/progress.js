@@ -275,11 +275,13 @@ const ProgressView = {
     const goalsR = (typeof Goals !== 'undefined' && Goals.resolve) ? Goals.resolve(goals) : {};
     const calT = goalsR.calories || 0;
     const proT = goalsR.protein || 0;
+    const waterT = goalsR.water_oz || goalsR.water || 0;
     const cal = Math.round(totals.calories || 0);
     const protein = Math.round(totals.protein || 0);
     const fat = Math.round(totals.fat || 0);
     const fiber = Math.round(totals.fiber || 0);
     const carbs = Math.round(totals.carbs || 0);
+    const water = Math.round(totals.water_oz || analysis.water_oz || 0);
     // Soluble / insoluble fiber breakdown — populated by the cron's
     // fiber_split.py from per-entry ingredient ratios. Surfaced as its
     // own row only when both halves are present and non-zero.
@@ -313,17 +315,36 @@ const ProgressView = {
       ${calT ? `<div style="font-size:var(--text-xs); color:var(--text-muted);">${cal - calT >= 0 ? '+' : ''}${cal - calT}</div>` : ''}
     </div>`;
 
-    // Macro grid: protein / fat / fiber / carbs
-    html += '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:var(--space-xs); text-align:center; border-top:1px solid var(--border-color); padding-top:var(--space-sm);">';
+    // Streaks pill row — only renders for streaks of 2+ days. A 1-day
+    // "streak" is just "you logged today" — not motivating, just noise.
+    const streaks = analysis.streaks || {};
+    const streakPills = [];
+    if ((streaks.tracking || 0) >= 2) streakPills.push({ label: 'tracking', n: streaks.tracking });
+    if ((streaks.calories || 0) >= 2) streakPills.push({ label: 'cal target', n: streaks.calories });
+    if ((streaks.protein || 0) >= 2) streakPills.push({ label: 'protein', n: streaks.protein });
+    if (streakPills.length) {
+      html += '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:var(--space-sm);">';
+      for (const p of streakPills) {
+        html += `<span style="font-size:11px; font-weight:600; padding:3px 8px; border-radius:var(--radius-full); background:rgba(245, 158, 11, 0.12); color:var(--accent-orange); border:1px solid rgba(245, 158, 11, 0.25);">&#128293; ${p.n}d ${p.label}</span>`;
+      }
+      html += '</div>';
+    }
+
+    // Macro grid — 5 cells now (protein / fat / fiber / carbs / water).
+    // Water joined the row in v246 so the daily summary tells the whole
+    // story at a glance instead of forcing a scroll to the Today screen.
+    html += '<div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; text-align:center; border-top:1px solid var(--border-color); padding-top:var(--space-sm);">';
     const macroCell = (label, val, suffix, target, accent) => `
       <div>
         <div style="font-size:var(--text-base); font-weight:600; color:${accent};">${val}${suffix}</div>
         <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">${label}${target ? ` / ${target}` : ''}</div>
       </div>`;
+    const waterAccent = waterT && water >= waterT * 0.85 ? 'var(--accent-primary)' : (water === 0 ? 'var(--accent-orange)' : 'var(--text-secondary)');
     html += macroCell('Protein', protein, 'g', proT || '', proT && protein >= proT * 0.85 ? 'var(--accent-green)' : 'var(--text-secondary)');
     html += macroCell('Fat', fat, 'g', '', 'var(--text-secondary)');
     html += macroCell('Fiber', fiber, 'g', '', 'var(--text-secondary)');
     html += macroCell('Carbs', carbs, 'g', '', 'var(--text-secondary)');
+    html += macroCell('Water', water, 'oz', waterT || '', waterAccent);
     html += '</div>';
 
     // Fiber breakdown row (soluble vs insoluble). Only shown when the cron
@@ -507,6 +528,19 @@ const ProgressView = {
     // --- Weekly Workout Schedule ---
     const schedule = regimen.weeklySchedule || [];
     if (schedule.length > 0) {
+      // Phase + focus subhead — gives context for what the lifts are FOR.
+      // The cron sets these in regimen.phase ("recomp" | "cut" | "build") and
+      // regimen.focus (one-line summary). Render as a tiny banner above the
+      // schedule when present.
+      const phase = (regimen.phase || '').trim();
+      const focus = (regimen.focus || '').trim();
+      if (phase || focus) {
+        html += `<div style="display:flex; align-items:center; gap:var(--space-xs); margin-bottom:var(--space-xs); padding:0 var(--space-xs); font-size:var(--text-xs);">
+          ${phase ? `<span style="font-weight:700; color:var(--accent-primary); text-transform:uppercase; letter-spacing:0.06em;">${UI.escapeHtml(phase)}</span>` : ''}
+          ${phase && focus ? '<span style="color:var(--text-muted);">·</span>' : ''}
+          ${focus ? `<span style="color:var(--text-secondary);">${UI.escapeHtml(focus)}</span>` : ''}
+        </div>`;
+      }
       html += '<h2 class="section-header">Workout Schedule</h2><div class="card">';
       const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
       const todayName = dayNames[(today.getDay() + 6) % 7]; // JS getDay: 0=Sun
