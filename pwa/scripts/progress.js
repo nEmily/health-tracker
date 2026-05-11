@@ -306,7 +306,10 @@ const ProgressView = {
     const regimen = await DB.getProfile('regimen') || {};
     const prefs = await DB.getProfile('preferences') || {};
     const activePlan = goals.activePlan || 'moderate';
-    const plan = goals[activePlan] || goals.moderate || {};
+    // Legacy schema had {goals: {moderate: {...}, hardcore: {...}}} — current
+    // schema is flat ({calories, macros, water_oz, fiber, ...} directly on
+    // goals). Fall back to the flat shape so Daily Targets actually populate.
+    const plan = goals[activePlan] || goals.moderate || goals;
     const timeline = goals.timeline || {};
     const milestones = timeline.milestones || goals.fitnessGoals || [];
     const today = new Date(UI.today() + 'T12:00:00');
@@ -321,24 +324,41 @@ const ProgressView = {
     </div>`;
 
     // --- Daily Targets ---
+    // Tolerant of two schema shapes:
+    //   New:  {calories:{daily},  macros:{protein:{grams},  fat:{grams}}, water_oz, fiber:{daily_g}}
+    //   Old:  {calories:{daily}, protein:{grams}, fat:{grams}, water:{daily_oz}, fiber:{daily_g}}
+    // The renderer was reading only the old shape, so every field showed '—'
+    // when goals.json uses the new nested schema.
+    const cal = plan.calories?.daily ?? plan.calories ?? '—';
+    const prot = plan.macros?.protein?.grams ?? plan.macros?.protein?.target
+              ?? plan.protein?.grams ?? plan.protein ?? '—';
+    const fat = plan.macros?.fat?.grams ?? plan.macros?.fat?.target
+             ?? plan.fat?.grams ?? plan.fat ?? '—';
+    const water = plan.water_oz ?? plan.water?.daily_oz ?? plan.water ?? '—';
+    const fiber = plan.fiber?.daily_g ?? plan.fiber?.target ?? plan.fiber ?? null;
+
     html += '<h2 class="section-header">Daily Targets</h2><div class="card">';
     html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-sm);">
       <div style="text-align:center;">
-        <div style="font-size:var(--text-lg); font-weight:600;">${plan.calories?.daily || '—'}</div>
+        <div style="font-size:var(--text-lg); font-weight:600;">${cal}</div>
         <div style="font-size:var(--text-xs); color:var(--text-muted);">calories</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:var(--text-lg); font-weight:600;">${plan.protein?.grams || '—'}g</div>
+        <div style="font-size:var(--text-lg); font-weight:600;">${prot}g</div>
         <div style="font-size:var(--text-xs); color:var(--text-muted);">protein</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:var(--text-lg); font-weight:600;">${plan.water?.daily_oz || '—'} oz</div>
+        <div style="font-size:var(--text-lg); font-weight:600;">${water} oz</div>
         <div style="font-size:var(--text-xs); color:var(--text-muted);">water</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:var(--text-lg); font-weight:600;">${plan.fat?.grams || '—'}g</div>
-        <div style="font-size:var(--text-xs); color:var(--text-muted);">fat limit</div>
+        <div style="font-size:var(--text-lg); font-weight:600;">${fat}g</div>
+        <div style="font-size:var(--text-xs); color:var(--text-muted);">fat floor</div>
       </div>
+      ${fiber ? `<div style="text-align:center; grid-column: 1 / -1;">
+        <div style="font-size:var(--text-lg); font-weight:600;">${fiber}g</div>
+        <div style="font-size:var(--text-xs); color:var(--text-muted);">fiber target</div>
+      </div>` : ''}
     </div>`;
     if (plan.calories?.sunday_flexible) {
       html += `<div style="font-size:var(--text-xs); color:var(--text-muted); text-align:center; margin-top:var(--space-xs);">Sundays: ${plan.calories.sunday_flexible} cal flexible</div>`;
@@ -548,23 +568,81 @@ const ProgressView = {
     return 'other';
   },
 
-  // Aggregate all exercise history from dailySummary records
+  // Aggregate all exercise history from BOTH:
+  //   1. dailySummary.fitness_sets — the structured checklist tool output
+  //   2. type=workout entries — free-form workout entries the user logs
+  //      from "More -> Workout". Notes typically contain '{sets}x{reps}
+  //      {exercise}' lines; parsed best-effort. Without this, modern
+  //      workout entries don't appear in the Fitness Progress tab at all.
   async _buildFitnessHistory() {
     if (ProgressView._fitnessCache) return ProgressView._fitnessCache;
     const all = await DB.getAllDailySummaries();
     const map = {}; // exerciseName → [{date, sets}]
 
     for (const summary of all.sort((a, b) => a.date.localeCompare(b.date))) {
-      if (!summary.fitness_sets) continue;
-      for (const [exName, sets] of Object.entries(summary.fitness_sets)) {
-        if (!Array.isArray(sets) || !sets.some(s => s.done)) continue;
-        if (!map[exName]) map[exName] = [];
-        map[exName].push({ date: summary.date, sets });
+      // Source 1: structured checklist
+      if (summary.fitness_sets) {
+        for (const [exName, sets] of Object.entries(summary.fitness_sets)) {
+          if (!Array.isArray(sets) || !sets.some(s => s.done)) continue;
+          if (!map[exName]) map[exName] = [];
+          map[exName].push({ date: summary.date, sets });
+        }
+      }
+      // Source 2: workout entries (parse from notes)
+      const workouts = (summary.entries || []).filter(e => e.type === 'workout');
+      for (const w of workouts) {
+        const parsed = ProgressView._parseWorkoutNotes(w.notes || w.description || '');
+        for (const { name, sets, reps } of parsed) {
+          if (!map[name]) map[name] = [];
+          // Synthesize a sets array compatible with the existing render code
+          const setsArr = Array.from({ length: sets }, () => ({ reps, done: true }));
+          map[name].push({ date: summary.date, sets: setsArr, _fromEntry: true });
+        }
+        // If nothing parsable, still record the day under a generic key so
+        // the activity strip + day filter pick it up
+        if (parsed.length === 0) {
+          const key = 'Workout (logged)';
+          if (!map[key]) map[key] = [];
+          map[key].push({ date: summary.date, sets: [{ reps: '?', done: true }], _fromEntry: true });
+        }
       }
     }
 
     ProgressView._fitnessCache = map;
     return map;
+  },
+
+  _parseWorkoutNotes(notes) {
+    // Extract "{sets}x{reps} {exercise}" patterns from free-form workout
+    // notes. Multi-line — each line may have one entry. Conservative —
+    // skips lines that don't clearly match the pattern.
+    // Examples that parse:
+    //   "4x8 hanging leg raises with bent knees"
+    //   "3x10 cable crunches 55lbs"
+    //   "1x11 30lbs cable crunch"
+    const out = [];
+    if (!notes) return out;
+    for (const rawLine of notes.split(/\n+/)) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const m = line.match(/^(\d{1,2})\s*[x×]\s*(\d{1,3})\s+(.+)$/i);
+      if (!m) continue;
+      const sets = parseInt(m[1], 10);
+      const reps = parseInt(m[2], 10);
+      let name = m[3].trim()
+        // Strip a leading weight ("30lbs ") if present
+        .replace(/^\d{1,3}\s*(?:lbs?|kg|pounds?)\b\s*/i, '')
+        // Drop trailing weight or duration descriptors
+        .replace(/\s+\d{1,3}\s*(?:lbs?|kg|pounds?)\b.*$/i, '')
+        .replace(/\s+\d+\s*sec(?:ond)?s?\s+hold.*$/i, '')
+        .trim();
+      // Skip if name looks like a measurement (just digits/letters of weight)
+      if (!name || /^[\d\.\s]+$/.test(name)) continue;
+      // Title-case for consistent grouping
+      name = name.charAt(0).toUpperCase() + name.slice(1);
+      out.push({ name, sets, reps });
+    }
+    return out;
   },
 
   async renderFitness() {

@@ -1152,7 +1152,7 @@ const App = {
       try {
         // Tolerate any of the regimen schedule shapes (weeklySchedule,
         // weekly_schedule, weeklyStructure, days). Fitness._normalizeSchedule
-        // returns [] if none present, which means show the empty state.
+        // returns [] if none present, which means there's no plan for the day.
         const hasSchedule = regimen && (Fitness._normalizeSchedule
           ? Fitness._normalizeSchedule(regimen).length > 0
           : !!regimen.weeklySchedule);
@@ -1161,7 +1161,31 @@ const App = {
           workoutEl.innerHTML = fitnessHtml;
           Fitness.bindEvents(date, workoutEl);
         } else {
-          workoutEl.innerHTML = '<div class="card" style="padding: var(--space-lg); text-align: center; color: var(--text-secondary); font-size: var(--text-sm);">Log a workout from the + button above, or set up a workout plan in a coaching session.</div>';
+          // No regimen for this date — still surface any fitness_notes the
+          // user saved that day so historical workout notes don't disappear.
+          // Also surface any type=workout entries logged that day.
+          const summary2 = preloaded?.summary || summary;
+          const notes = summary2?.fitness_notes || '';
+          const workoutEntries = (entries || []).filter(e => e.type === 'workout');
+          let html = '';
+          if (notes || workoutEntries.length > 0) {
+            html += '<div class="card" style="padding: var(--space-md); margin-top: var(--space-sm);">';
+            if (workoutEntries.length > 0) {
+              html += '<div style="font-size:var(--text-xs); text-transform:uppercase; color:var(--text-muted); font-weight:600; margin-bottom:var(--space-xs);">Workout</div>';
+              for (const w of workoutEntries) {
+                const wn = (w.notes || w.description || '').replace(/\n/g, '<br>');
+                html += `<div style="font-size:var(--text-sm); white-space:pre-wrap; margin-bottom:var(--space-sm);">${UI.escapeHtml(w.notes || w.description || '').replace(/\n/g, '<br>')}</div>`;
+              }
+            }
+            if (notes) {
+              html += '<div style="font-size:var(--text-xs); text-transform:uppercase; color:var(--text-muted); font-weight:600; margin-bottom:var(--space-xs);">Notes</div>';
+              html += `<div style="font-size:var(--text-sm); white-space:pre-wrap;">${UI.escapeHtml(notes)}</div>`;
+            }
+            html += '</div>';
+          } else {
+            html = '<div class="card" style="padding: var(--space-lg); text-align: center; color: var(--text-secondary); font-size: var(--text-sm);">Log a workout from the + button above, or set up a workout plan in a coaching session.</div>';
+          }
+          workoutEl.innerHTML = html;
         }
       } catch (e) { console.warn('Workout render error:', e); workoutEl.innerHTML = ''; }
     }

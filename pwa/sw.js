@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v233-meal-regimen-shapes-and-chat-goals';
+const CACHE_NAME = 'coach-v234-plan-targets-fitness-notes-history';
 
 const ASSETS = [
   './',
