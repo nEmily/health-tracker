@@ -2243,6 +2243,12 @@ const ProgressView = {
       weeks.push({ logged: daysWithMeals.size, total: totalDays });
     }
 
+    // Hide the card entirely when the user has zero history across all
+    // three weeks — '0/1 · 0/7 · 0/7' was rendering for fresh users and
+    // looked like a stale-data bug.
+    const totalLogged = weeks.reduce((acc, w) => acc + w.logged, 0);
+    if (totalLogged === 0) return '';
+
     const trend = weeks[0].logged / weeks[0].total > weeks[1].logged / weeks[1].total
       ? '&#9650;'
       : weeks[0].logged / weeks[0].total < weeks[1].logged / weeks[1].total

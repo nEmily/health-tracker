@@ -205,6 +205,21 @@ const UI = {
     document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
   },
 
+  // Global ESC handler — closes any open modal. Audit found only one
+  // ESC handler in the whole codebase (a single inline modal at ui.js
+  // L903), so most modals trapped the user with no keyboard escape and
+  // no overlay-tap close. Wire once on app boot.
+  initGlobalEscape() {
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const open = document.querySelector('.modal-overlay');
+      if (open) {
+        e.preventDefault();
+        UI.dismissModals();
+      }
+    });
+  },
+
   // Scroll focused input into view when mobile keyboard opens
   initKeyboardScroll() {
     document.addEventListener('focusin', (e) => {

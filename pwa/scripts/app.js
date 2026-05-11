@@ -760,6 +760,7 @@ const App = {
     App.initPanels();
     QuickLog.init();
     UI.initKeyboardScroll();
+    UI.initGlobalEscape();
     window.addEventListener('hashchange', () => App.handleRoute());
 
     // Auto-retry sync when coming back online

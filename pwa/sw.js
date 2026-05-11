@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v246-streaks-water-and-regimen-phase-focus';
+const CACHE_NAME = 'coach-v247-global-escape-empty-state-cleanup';
 
 const ASSETS = [
   './',

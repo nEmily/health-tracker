@@ -80,12 +80,17 @@ const CoachChat = {
     let html = '<div class="coach-chat">';
     html += '<div class="coach-messages" id="coach-messages">';
 
-    // "Load older" button at top of scroll
-    html += `
-      <div class="coach-load-older-wrap">
-        <button class="coach-load-older" id="coach-load-older">Load older messages</button>
-      </div>
-    `;
+    // "Load older" button at top of scroll. Only render when the user has
+    // history to load — on a brand-new account or a session with zero
+    // messages anywhere in the window, the button has nothing to do and
+    // just confuses the empty-state UI.
+    if (totalEvents > 0) {
+      html += `
+        <div class="coach-load-older-wrap">
+          <button class="coach-load-older" id="coach-load-older">Load older messages</button>
+        </div>
+      `;
+    }
 
     if (totalEvents === 0) {
       // Pure empty state — no messages anywhere in window.
