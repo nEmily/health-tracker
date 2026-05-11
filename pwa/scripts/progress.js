@@ -280,6 +280,12 @@ const ProgressView = {
     const fat = Math.round(totals.fat || 0);
     const fiber = Math.round(totals.fiber || 0);
     const carbs = Math.round(totals.carbs || 0);
+    // Soluble / insoluble fiber breakdown — populated by the cron's
+    // fiber_split.py from per-entry ingredient ratios. Surfaced as its
+    // own row only when both halves are present and non-zero.
+    const fiberSol = totals.solubleFiber != null ? Math.round(totals.solubleFiber * 10) / 10 : null;
+    const fiberInsol = totals.insolubleFiber != null ? Math.round(totals.insolubleFiber * 10) / 10 : null;
+    const hasFiberSplit = (fiberSol != null && fiberInsol != null) && (fiberSol > 0 || fiberInsol > 0);
     const isToday = analysis.date === UI.today();
     const labelDate = isToday ? 'Today' : (analysis.date === UI.yesterday(UI.today()) ? 'Yesterday' : (() => {
       const d = new Date(analysis.date + 'T12:00:00');
@@ -319,6 +325,22 @@ const ProgressView = {
     html += macroCell('Fiber', fiber, 'g', '', 'var(--text-secondary)');
     html += macroCell('Carbs', carbs, 'g', '', 'var(--text-secondary)');
     html += '</div>';
+
+    // Fiber breakdown row (soluble vs insoluble). Only shown when the cron
+    // has produced a split — otherwise we'd render '0g / 0g' for older
+    // analyses that pre-date fiber_split.py.
+    if (hasFiberSplit) {
+      html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-xs); text-align:center; margin-top:var(--space-sm); padding-top:var(--space-sm); border-top:1px solid var(--border-color);">
+        <div>
+          <div style="font-size:var(--text-sm); font-weight:600; color:var(--text-secondary);">${fiberSol}g</div>
+          <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Soluble</div>
+        </div>
+        <div>
+          <div style="font-size:var(--text-sm); font-weight:600; color:var(--text-secondary);">${fiberInsol}g</div>
+          <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Insoluble</div>
+        </div>
+      </div>`;
+    }
 
     // Highlights (green checks)
     if (Array.isArray(analysis.highlights) && analysis.highlights.length) {

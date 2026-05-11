@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v244-regimen-echo-segment-overflow-fat-floor';
+const CACHE_NAME = 'coach-v245-fiber-split-row-soluble-vs-insoluble';
 
 const ASSETS = [
   './',
