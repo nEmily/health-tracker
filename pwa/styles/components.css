@@ -2840,16 +2840,32 @@ input[type="range"]::-webkit-slider-thumb {
   display: flex;
   flex-direction: column;
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  /* Edge-to-edge fill of the Chat screen (parent has padding:0 override).
+     No border / no radius — iMessage-style continuous chat. */
+  border: none;
+  border-radius: 0;
   overflow: hidden;
-  /* Continuous-history chat: fill the viewport between the brand header
-     above and the bottom-nav below. Use 100dvh (dynamic viewport height)
-     so iOS Safari's address-bar collapse doesn't reveal content behind
-     the bottom nav. Subtract: brand header (~52px), bottom nav (~76px),
-     screen padding (~16px top + 16px bottom + safe-area). */
-  height: calc(100dvh - 160px - env(safe-area-inset-bottom, 0px));
-  min-height: 400px;
+  flex: 1;
+  min-height: 0;  /* allow flex child to shrink below content height */
+}
+
+/* Override .screen padding for Chat tab so there is no "dead zone" around
+   the chat card. Touch/scroll anywhere in the Chat tab targets the
+   messages list, like iMessage. */
+#screen-coach {
+  padding: 0;
+}
+#screen-coach.active {
+  /* Prevent the outer screen from scrolling; only .coach-messages does */
+  overflow: hidden;
+}
+/* coach-inbox is the flex child of screen-coach — must flex to fill, and
+   itself be a column flex container so .coach-chat (its child) can flex. */
+#coach-inbox {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Day separator line in continuous chat history */
