@@ -39,34 +39,107 @@ const CoachChat = {
     return parts.join(', ') || 'Settings updated';
   },
 
-  async render(date) {
+  // How many days of history to load by default. Older days are fetched
+  // when the user taps "Load older" at the top of the scroll.
+  _DEFAULT_WINDOW_DAYS: 7,
+  // Increment by this many days when "Load older" is tapped.
+  _LOAD_MORE_DAYS: 7,
+  // Tracks how many days back from today we're currently rendering.
+  _windowDays: 7,
+
+  async render(_unusedDate) {
+    // Continuous chat history. Renders messages from the last _windowDays
+    // days, with a date separator between each day. Newest at the bottom.
+    // Older days fetched on demand via "Load older" button.
+    const today = UI.today();
+    const days = CoachChat._windowDays;
+
+    // Build the list of dates we want to render, oldest -> newest.
+    const dateList = [];
+    const todayDate = new Date(today + 'T12:00:00');
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(todayDate);
+      d.setDate(d.getDate() - i);
+      dateList.push(d.toISOString().slice(0, 10));
+    }
+
+    // Walk each date, collect timeline entries with the date attached.
+    const buckets = [];
+    let hasUnansweredAnywhere = false;
+    let totalEvents = 0;
+    for (const date of dateList) {
+      const events = await CoachChat._eventsForDate(date);
+      if (events.unanswered) hasUnansweredAnywhere = true;
+      if (events.timeline.length > 0 || date === today) {
+        // Always include today's bucket (so empty-state hint shows correctly)
+        buckets.push({ date, timeline: events.timeline });
+        totalEvents += events.timeline.length;
+      }
+    }
+
+    let html = '<div class="coach-chat">';
+    html += '<div class="coach-messages" id="coach-messages">';
+
+    // "Load older" button at top of scroll
+    html += `
+      <div class="coach-load-older-wrap">
+        <button class="coach-load-older" id="coach-load-older">Load older messages</button>
+      </div>
+    `;
+
+    if (totalEvents === 0) {
+      // Pure empty state — no messages anywhere in window.
+      html += `
+        <div class="coach-empty-state">
+          <div class="coach-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+          </div>
+          <p class="coach-empty-title">Your coach is here</p>
+          <p class="coach-empty-sub">Ask about your diet, workouts, or goals. Send a message below — your coach checks in every ~30 min.</p>
+        </div>
+      `;
+    } else {
+      for (const bucket of buckets) {
+        html += CoachChat._renderBucket(bucket, today);
+      }
+      if (hasUnansweredAnywhere) {
+        html += '<div class="chat-waiting">Coach is reviewing your message...</div>';
+      }
+    }
+
+    html += '</div>'; // end .coach-messages
+
+    // Input bar — always shown (any reply lands on today's bucket bottom)
+    html += `
+      <div class="coach-input-bar">
+        <textarea class="coach-input" id="coach-input" placeholder="Ask your coach..." rows="1"></textarea>
+        <button class="coach-send" id="coach-send" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+      <div class="coach-reply-hint">~30 min reply via sync</div>
+    `;
+    html += '</div>';
+    return html;
+  },
+
+  // Build timeline + unanswered-flag for a single date.
+  async _eventsForDate(date) {
     const summary = await DB.getDailySummary(date);
     const analysis = await DB.getAnalysis(date);
-    const isToday = date === UI.today();
-
-    // Merge user messages from dailySummary with coach responses from analysis
-    const userMessages = (summary.coachChat || []).filter(m => m.role === 'user');
-    const rawCoachMessages = (analysis?.coachResponses || []);
-
-    // Normalize respondsTo: prefer array field, fall back to [replyTo] for old entries
+    const userMessages = (summary?.coachChat || []).filter(m => m.role === 'user');
+    const rawCoachMessages = analysis?.coachResponses || [];
     const coachMessages = rawCoachMessages.map(cm => ({
       ...cm,
       respondsTo: Array.isArray(cm.respondsTo) ? cm.respondsTo : (cm.replyTo ? [cm.replyTo] : []),
     }));
-
-    // Determine which user messages have a coach reply
     const answeredIds = new Set();
     for (const cm of coachMessages) {
       for (const id of cm.respondsTo) answeredIds.add(id);
     }
-    const hasUnanswered = userMessages.some(m => !answeredIds.has(m.id));
-
-    // Strict chronological order by timestamp.
-    // Coach response timestamps are now server-side (synthesis run time) —
-    // the orchestrator overrides any LLM-supplied value in
-    // _normalize_coach_responses. So raw timestamp sort reflects reality:
-    // user msgs at the time the user sent them, coach replies at the time
-    // the cron actually generated them.
+    const unanswered = userMessages.some(m => !answeredIds.has(m.id));
     const timeline = [];
     for (const msg of userMessages) {
       timeline.push({
@@ -83,85 +156,88 @@ const CoachChat = {
       }
     }
     timeline.sort((a, b) => a.timestamp - b.timestamp);
+    return { timeline, unanswered };
+  },
 
-    let html = '<div class="coach-chat">';
-
-    // Messages area — always rendered, takes flex space
-    html += '<div class="coach-messages" id="coach-messages">';
-
-    if (timeline.length === 0) {
-      // Empty state: friendly explanation of how this works
-      html += `
-        <div class="coach-empty-state">
-          <div class="coach-empty-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-            </svg>
+  _renderBucket(bucket, today) {
+    const dt = new Date(bucket.date + 'T12:00:00');
+    let label;
+    if (bucket.date === today) label = 'Today';
+    else {
+      const yesterday = new Date(today + 'T12:00:00');
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (bucket.date === yesterday.toISOString().slice(0, 10)) label = 'Yesterday';
+      else label = dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    }
+    let html = `<div class="coach-day-sep"><span>${UI.escapeHtml(label)}</span></div>`;
+    if (bucket.timeline.length === 0) {
+      // Today with no activity — render minimal hint, no bubbles
+      return html;
+    }
+    for (const msg of bucket.timeline) {
+      if (msg.role === 'settings') {
+        const summary = CoachChat.formatSettingUpdate(msg.updates);
+        html += `
+          <div class="coach-setting-update">
+            <div class="coach-setting-icon">✓</div>
+            <div class="coach-setting-text">${UI.escapeHtml(summary)}</div>
           </div>
-          <p class="coach-empty-title">Your coach is here</p>
-          <p class="coach-empty-sub">Ask about your diet, workouts, or goals. ${isToday ? 'Send a message below — your coach checks in every ~30 min.' : 'No messages for this day.'}</p>
-        </div>
-      `;
-    } else {
-      for (const msg of timeline) {
-        if (msg.role === 'settings') {
-          const summary = CoachChat.formatSettingUpdate(msg.updates);
-          html += `
-            <div class="coach-setting-update">
-              <div class="coach-setting-icon">✓</div>
-              <div class="coach-setting-text">${UI.escapeHtml(summary)}</div>
-            </div>
-          `;
-        } else {
-          const isUser = msg.role === 'user';
-          const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-          html += `
-            <div class="chat-bubble ${isUser ? 'chat-user' : 'chat-coach'}">
-              <div class="chat-text">${UI.escapeHtml(msg.text)}</div>
-              ${time ? `<div class="chat-time">${time}</div>` : ''}
-            </div>
-          `;
-        }
-      }
-      if (hasUnanswered) {
-        html += '<div class="chat-waiting">Coach is reviewing your message...</div>';
+        `;
+      } else {
+        const isUser = msg.role === 'user';
+        const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+        html += `
+          <div class="chat-bubble ${isUser ? 'chat-user' : 'chat-coach'}">
+            <div class="chat-text">${UI.escapeHtml(msg.text)}</div>
+            ${time ? `<div class="chat-time">${time}</div>` : ''}
+          </div>
+        `;
       }
     }
-
-    html += '</div>'; // end .coach-messages
-
-    // Input bar (only for today) — anchored at bottom of chat area
-    if (isToday) {
-      html += `
-        <div class="coach-input-bar">
-          <textarea class="coach-input" id="coach-input" placeholder="Ask your coach..." rows="1"></textarea>
-          <button class="coach-send" id="coach-send" aria-label="Send">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          </button>
-        </div>
-        <div class="coach-reply-hint">~30 min reply via sync</div>
-      `;
-    }
-
-    html += '</div>';
     return html;
   },
 
-  bindEvents(date) {
+  bindEvents() {
     const input = document.getElementById('coach-input');
     const sendBtn = document.getElementById('coach-send');
+    const loadOlder = document.getElementById('coach-load-older');
+
+    // Load older messages — extend the rendered window
+    if (loadOlder) {
+      loadOlder.addEventListener('click', async () => {
+        CoachChat._windowDays += CoachChat._LOAD_MORE_DAYS;
+        const container = document.getElementById('coach-inbox');
+        if (container) {
+          // Preserve approximate scroll position by capturing the first
+          // visible element's offsetTop before re-render
+          const messagesBefore = document.getElementById('coach-messages');
+          const scrollHeightBefore = messagesBefore?.scrollHeight || 0;
+          container.innerHTML = await CoachChat.render();
+          CoachChat.bindEvents();
+          const messages = document.getElementById('coach-messages');
+          if (messages) {
+            // Scroll to keep the user's previous viewport in roughly the
+            // same content position — new content prepended on top
+            messages.scrollTop = messages.scrollHeight - scrollHeightBefore;
+          }
+        }
+      });
+    }
+
     if (!input || !sendBtn) return;
 
     const send = async () => {
       const text = input.value.trim();
       if (!text) return;
-
       input.value = '';
       input.disabled = true;
       sendBtn.disabled = true;
 
+      // Messages always go to today (where the input lives).
+      const today = UI.today();
+
       try {
-        const summary = await DB.getDailySummary(date);
+        const summary = await DB.getDailySummary(today);
         const chat = summary.coachChat || [];
         const msg = {
           id: `coach_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -170,18 +246,16 @@ const CoachChat = {
           timestamp: Date.now(),
         };
         chat.push(msg);
-        await DB.updateDailySummary(date, { coachChat: chat });
+        await DB.updateDailySummary(today, { coachChat: chat });
 
-        // Trigger cloud relay upload so the processing script sees the message
         if (await CloudRelay.isConfigured()) {
-          CloudRelay.queueUpload(date);
+          CloudRelay.queueUpload(today);
         }
 
-        // Re-render chat
         const container = document.getElementById('coach-inbox');
         if (container) {
-          container.innerHTML = await CoachChat.render(date);
-          CoachChat.bindEvents(date);
+          container.innerHTML = await CoachChat.render();
+          CoachChat.bindEvents();
           const messages = document.getElementById('coach-messages');
           if (messages) messages.scrollTop = messages.scrollHeight;
         }
@@ -190,7 +264,6 @@ const CoachChat = {
         UI.toast('Failed to send message', 'error');
       }
 
-      // Re-target fresh DOM elements (old ones may be detached after re-render)
       const freshInput = document.getElementById('coach-input');
       const freshBtn = document.getElementById('coach-send');
       if (freshInput) { freshInput.disabled = false; freshInput.focus(); }

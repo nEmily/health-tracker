@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v235-psyllium-fiber-and-flimeal-known';
+const CACHE_NAME = 'coach-v236-chat-tab-continuous-history';
 
 const ASSETS = [
   './',

@@ -2843,9 +2843,54 @@ input[type="range"]::-webkit-slider-thumb {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  /* Fixed height so the chat feels bounded; adjust if needed */
-  min-height: 320px;
-  max-height: 480px;
+  /* Continuous-history chat: take most of the available viewport so the
+     user can scroll through days of conversation. Subtract: header (~60px),
+     bottom nav (~80px), and a little padding (~24px). */
+  height: calc(100vh - 164px);
+  min-height: 400px;
+}
+
+/* Day separator line in continuous chat history */
+.coach-day-sep {
+  display: flex;
+  align-items: center;
+  margin: var(--space-md) 0 var(--space-sm);
+  gap: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.coach-day-sep::before,
+.coach-day-sep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+.coach-day-sep span {
+  white-space: nowrap;
+}
+
+/* "Load older messages" button at top of chat */
+.coach-load-older-wrap {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-xs) 0 var(--space-sm);
+}
+.coach-load-older {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.coach-load-older:hover,
+.coach-load-older:active {
+  background: var(--bg-hover);
 }
 
 /* Messages area: grows to fill available space, scrollable */

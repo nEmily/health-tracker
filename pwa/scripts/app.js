@@ -892,6 +892,10 @@ const App = {
       App.currentScreen = screenId;
     }
 
+    // Header date nav: only relevant on Today (per-day stats). Chat is
+    // continuous history; Progress + Settings have no day concept.
+    const headerNav = document.querySelector('.header-nav');
+    if (headerNav) headerNav.style.display = (screenId === 'today') ? '' : 'none';
 
     // Update nav
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -1275,70 +1279,30 @@ const App = {
   },
 
   async loadCoachView() {
-    const date = App.selectedDate;
-
-    // Coach inbox (full view, not collapsible)
+    // Coach inbox — continuous chat history. selectedDate is no longer
+    // relevant (chat tab shows last 7 days regardless of header date).
     const inboxEl = document.getElementById('coach-inbox');
     if (inboxEl) {
       try {
         const savedText = document.getElementById('coach-input')?.value || '';
-        const coachHtml = await CoachChat.render(date);
+        // Reset window on tab entry so we always start from the default 7-day view
+        CoachChat._windowDays = CoachChat._DEFAULT_WINDOW_DAYS;
+        const coachHtml = await CoachChat.render();
         inboxEl.innerHTML = coachHtml;
-        CoachChat.bindEvents(date);
+        CoachChat.bindEvents();
         if (savedText) { const inp = document.getElementById('coach-input'); if (inp) inp.value = savedText; }
-        // Scroll messages to bottom
+        // Auto-scroll to the bottom (newest) on open
         const msgs = document.getElementById('coach-messages');
         if (msgs) msgs.scrollTop = msgs.scrollHeight;
-      } catch (e) { inboxEl.innerHTML = ''; }
+      } catch (e) { console.warn('Coach render error:', e); inboxEl.innerHTML = ''; }
     }
 
-    // In-depth analysis + versioning
+    // Per-day "Analysis" + "Remaining Today" cards used to live on the
+    // Coach tab below the chat. As of 2026-05-10 they moved to Progress >
+    // Insights (per-day analysis) and Today (cal ring + macro stats).
+    // The Chat tab is now ONLY chat — continuous scroll, last 7 days.
     const analysisEl = document.getElementById('coach-analysis');
-    if (analysisEl) {
-      const analysis = await DB.getAnalysis(date);
-      if (analysis) {
-        const goals = await DB.getProfile('goals') || {};
-        let analysisHtml = '<div class="coach-analysis-section"><p class="coach-section-label">Analysis</p>' +
-          GoalsView.renderRemainingBudget(analysis, goals) +
-          GoalsView.renderAnalysisSummary(analysis, goals);
-
-        // Analysis version history
-        try {
-          const history = await DB.getAnalysisHistory(date);
-          if (history.length > 0) {
-            analysisHtml += '<h2 class="section-header">Previous Analyses</h2>';
-            for (const h of history.sort((a, b) => (b.importedAt || 0) - (a.importedAt || 0))) {
-              const time = h.importedAt ? new Date(h.importedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Unknown';
-              const d = h.data || {};
-              const cal = d.totals?.calories || '?';
-              const pro = d.totals?.protein || '?';
-              analysisHtml += `<div class="card" style="margin-bottom:var(--space-xs); opacity:0.7;">
-                <div style="display:flex; justify-content:space-between; font-size:var(--text-sm);">
-                  <span style="color:var(--text-muted);">${time}</span>
-                  <span>${cal} cal - ${pro}g P</span>
-                </div>
-              </div>`;
-            }
-          }
-        } catch (e) { /* no history store yet */ }
-
-        analysisHtml += '</div>'; // end .coach-analysis-section
-        analysisEl.innerHTML = analysisHtml;
-      } else {
-        analysisEl.innerHTML = `
-          <div class="coach-analysis-section">
-            <p class="coach-section-label">Analysis</p>
-            <div class="coach-analysis-empty">
-              <div class="coach-analysis-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 9h.01"/><path d="M9.5 15a5 5 0 005 0"/></svg>
-              </div>
-              <p class="coach-analysis-empty-title">No analysis yet for ${UI.formatDate(date)}</p>
-              <p class="coach-analysis-empty-sub">Your coach breaks down your day every ~30 min — calories, macros, highlights, and recommendations. Log some meals and sync to get started.</p>
-            </div>
-          </div>`;
-      }
-    }
-
+    if (analysisEl) analysisEl.innerHTML = '';
   },
 
   _getGreeting() {
