@@ -153,32 +153,118 @@ const Fitness = {
       form: 'Stand on edge of a step or flat ground. Rise up onto toes, squeezing calves at the top. Hold for 1 second. Lower slowly until heels are below the step (full stretch).',
       mistakes: 'Bouncing at the bottom (pause and stretch). Not going high enough (full contraction at top). Using momentum (slow and controlled).',
     },
+    'cable side bend': {
+      muscles: 'Obliques (internal + external), QL',
+      why: 'Loaded lateral flexion is the most direct oblique builder. The cable keeps tension on the side throughout the entire range — better than dumbbell side bends, which lose load at the top. Building obliques sharpens the waist taper.',
+      form: 'Stand sideways to a low cable, handle in the OUTER hand (farthest from the stack). Feet shoulder-width, hips square, free hand on hip. Bend laterally AWAY from the stack like you\'re trying to touch your knee with your fingers. Control back to vertical.',
+      mistakes: 'Rotating the torso (this is pure side-bend — keep hips and shoulders facing forward). Using the arm to pull (the arm just holds the handle, the obliques bend). Bending forward (lateral only, no flexion). Going too heavy and losing range.',
+    },
+    'pallof press': {
+      muscles: 'Obliques, deep core (anti-rotation)',
+      why: 'The single best anti-rotation exercise. Your obliques fight to keep your torso square while the cable tries to pull you sideways. Trains the core to resist force — which is what it actually does in life.',
+      form: 'Cable at sternum height, stand sideways to the stack. Hold the handle at chest with both hands, step OUT for tension. Press the handle straight out from the chest, hold 1-2 seconds resisting the pull, then return. The cable wants to rotate you — don\'t let it.',
+      mistakes: 'Letting the torso rotate toward the stack (the whole point is preventing this). Standing too close to the stack (no tension = no work). Using shoulders to press (it\'s an isometric core hold, not a chest press).',
+    },
+    'hip thrust': {
+      muscles: 'Glutes (max), hamstrings, core',
+      why: 'The single highest-EMG glute exercise. Builds the shape and strength of the glutes faster than squats or deadlifts because hip extension is loaded directly at end range. The exercise behind serious glute development.',
+      form: 'Upper back on a bench (across the shoulder blades, not the neck). Barbell across the hips with a pad — feet planted shoulder-width, shins vertical at the top. Drive through heels, locking out hips at the top. Squeeze glutes HARD. Ribs down, chin tucked — neutral spine throughout.',
+      mistakes: 'Hyperextending lower back at the top (ribs down — glutes do the lockout, not the spine). Feet too far forward (turns it into a hamstring exercise). Not locking out (full hip extension is the whole point). Skipping the pad and bruising your hips.',
+    },
+    'goblet squat': {
+      muscles: 'Quads, glutes, core',
+      why: 'The biggest calorie-burning muscles in your body. The front-loaded position forces an upright torso and braces the core every rep — bonus core work built in.',
+      form: 'Hold KB or DB at chest, elbows tucked. Feet shoulder-width, toes slightly out. Sit back AND down — hip crease below knee. Chest up, weight in heels. Drive up through heels.',
+      mistakes: 'Knees caving in (push them out over the toes). Leaning forward (chest proud — the load is on your chest for a reason). Not going deep enough (hip crease BELOW knee, not parallel).',
+    },
+    'cable woodchopper': {
+      muscles: 'Obliques (rotational), core, lats',
+      why: 'Rotational power and oblique strength under load. Different stimulus from the Pallof press — that one resists rotation, this one PRODUCES rotation against resistance. Both build a complete oblique.',
+      form: 'Cable high (high-to-low chop) or low (low-to-high chop), stand perpendicular to the stack. Hold the handle with both hands, arms straight. Rotate diagonally across the body, leading with the torso — arms are along for the ride. Control back to start.',
+      mistakes: 'Pulling with the arms (it\'s a torso rotation, arms stay relatively straight). Bending the elbows mid-rep (kills oblique load). Going too heavy (sloppy rotation = lower back stress). Letting the hips rotate fully (only the torso rotates — hips stay relatively square).',
+    },
+    'hip abduction machine': {
+      muscles: 'Glute medius, glute minimus (outer hip)',
+      why: 'Direct isolation of the glute medius — the side glute that creates hip shape and stabilizes the pelvis during squats and walking. Strong abductors prevent knee cave and improve every lower body lift.',
+      form: 'Seated abduction machine, pads against the OUTSIDE of the knees. Push knees OUT against the pads. Squeeze the outer glute at the end range, hold 1 second, control back in. Lean slightly forward to bias glute medius.',
+      mistakes: 'Using momentum (slow and controlled both directions). Not pausing at the end range (the squeeze is where the work happens). Going too heavy and rocking the body (lighter weight, cleaner reps).',
+    },
+    'cable crunch': {
+      muscles: 'Rectus abdominis (upper + lower fibers)',
+      why: 'The most loadable ab exercise. Lets you progressively overload the abs with weight — the same principle that builds every other muscle. Higher EMG than bodyweight crunches because of the resistance throughout the range.',
+      form: 'Rope on high pulley, kneel facing the cable. Hold rope at the sides of your head. Crunch DOWN by curling your spine — driving elbows toward thighs. Hips stay locked in place. This is SPINAL FLEXION, not a hip hinge.',
+      mistakes: 'Hinging at the hips instead of crunching (if the hips move, the abs aren\'t working). Pulling with the arms (rope is just an anchor for the load). Not curling the spine (the lower back should round at the bottom of the rep).',
+    },
+    'rdl': {
+      muscles: 'Hamstrings, glutes, lower back',
+      why: 'The hip hinge — the most important movement pattern for posture and glute/hamstring development. Strong posterior chain holds everything together and bulletproofs the lower back.',
+      form: 'Barbell or DBs in front of thighs. Slight knee bend (soft, NOT locked). Push hips BACK like closing a car door with your butt. Bar slides down the legs, stays close. Stop at deep hamstring stretch (just below the kneecap for most). Drive hips forward to stand. Neutral spine the entire time.',
+      mistakes: 'Rounding the back (chest up, lats engaged — pull the bar to your legs). Squatting instead of hinging (knees barely bend — hips go BACK). Going too heavy too soon (find the stretch first, add load second). Locking knees (slight bend always).',
+    },
+    'hollow body hold': {
+      muscles: 'Rectus abdominis, deep core (TVA), hip flexors',
+      why: 'Gymnastics staple. Teaches the whole core to fire as one unit and trains anti-extension. Carries over to every other lift — you brace better, lift heavier, protect your spine.',
+      form: 'Lie on back. Press lower back FLAT into the floor — completely glued, no gap. Lift shoulders and legs off the floor. Arms overhead, legs straight and low. Hold. The lower back stays flat for the entire hold — that\'s the whole exercise.',
+      mistakes: 'Lower back arching off the floor (you\'ve gone too far — bring arms or legs higher to make it easier). Holding the breath (breathe shallowly through the chest). Looking up (chin tucked slightly toward chest).',
+    },
+    'back extension': {
+      muscles: 'Spinal erectors, glutes, hamstrings',
+      why: 'Direct strengthening of the spinal erectors — the muscles that protect your lower back during every other lift. Weighted back extensions also load the glutes at end range, which makes them a serious posterior chain builder.',
+      form: '45-degree back extension bench. Hold a plate at the chest (or behind the head for more load). Hinge at the HIPS — lower until torso is below parallel. Extend back up by squeezing glutes and erectors. Stop when in line with the legs — do NOT hyperextend.',
+      mistakes: 'Hyperextending at the top (stop when torso is in line with legs — no further). Bending at the spine instead of hinging at the hips (the movement is at the hip joint). Jerking up (smooth and controlled). Going too heavy and losing form.',
+    },
+    'dumbbell pullover': {
+      muscles: 'Lats, serratus, pecs, long head of triceps',
+      why: 'Trains the lats in deep shoulder flexion — a range most pulling exercises miss. Also stretches the rib cage and serratus. Excellent for building back width and improving overhead mobility.',
+      form: 'Lie on a bench, hold a single DB overhead with both hands cupped under the top plate. Slight bend in the elbows — KEEP this bend constant. Lower the DB back behind the head until you feel a deep stretch in the lats and serratus. Pull the DB back over the chest using the lats, not the arms.',
+      mistakes: 'Bending the elbows during the rep (the bend stays constant — it\'s a straight-arm-ish movement). Flaring the ribs (ribs DOWN, core braced — protects the lower back). Going too heavy and losing the lat stretch (lighter = better range).',
+    },
+    'lat pulldown': {
+      muscles: 'Lats, biceps, rear delts, mid-back',
+      why: 'The lat-builder when pull-ups aren\'t there yet (or when you want to keep building once they are). Direct loadable pulling — the move that creates back width and the V-taper.',
+      form: 'Slightly wider than shoulder-width grip, lean back ~10-15 degrees. Pull the bar to the upper chest, leading with the ELBOWS (think: drive elbows to the floor). Squeeze lats hard at the bottom. Control the bar back up to full stretch — don\'t just let it snap up.',
+      mistakes: 'Leaning back too far and using momentum (10-15 degrees max). Pulling to the neck (upper chest is the target — neck pulls trash the shoulders). Using biceps instead of lats (think elbows, not hands). Not getting full stretch at the top (full range = full growth).',
+    },
   },
 
   // Get exercise list from a day plan — supports structured (exercises array) and legacy (description text)
   getExerciseList(todayPlan) {
     if (!todayPlan) return [];
     // New structured format: exercises array with name, sets, reps, formCue
+    const mapEx = (ex, opts = {}) => {
+      const setsReps = ex.sets && ex.reps ? `${ex.sets}x${ex.reps}` : '';
+      const dbKey = Object.keys(Fitness.exercises).find(k =>
+        ex.name.toLowerCase().includes(k) || k.includes(ex.name.toLowerCase())
+      );
+      return {
+        name: ex.name,
+        setsReps,
+        sets: ex.sets || null,
+        reps: ex.reps || null,
+        extra: ex.formCue || '',
+        isCore: (ex.section || '').toLowerCase() === 'core',
+        isOptional: !!opts.isOptional,
+        details: dbKey ? Fitness.exercises[dbKey] : null,
+      };
+    };
     if (todayPlan.exercises && Array.isArray(todayPlan.exercises) && todayPlan.exercises.length > 0) {
-      return todayPlan.exercises.map(ex => {
-        const setsReps = ex.sets && ex.reps ? `${ex.sets}x${ex.reps}` : '';
-        const dbKey = Object.keys(Fitness.exercises).find(k =>
-          ex.name.toLowerCase().includes(k) || k.includes(ex.name.toLowerCase())
-        );
-        return {
-          name: ex.name,
-          setsReps,
-          sets: ex.sets || null,
-          reps: ex.reps || null,
-          extra: ex.formCue || '',
-          isCore: (ex.section || '').toLowerCase() === 'core',
-          details: dbKey ? Fitness.exercises[dbKey] : null,
-        };
-      });
+      const main = todayPlan.exercises.map(ex => mapEx(ex));
+      // Append optional bonus exercises so the user can still see and check them.
+      // Schema variants: optionalBonus (camel), optional_bonus (snake), bonus.
+      const optionalArr = todayPlan.optionalBonus || todayPlan.optional_bonus || todayPlan.bonus || [];
+      const optional = Array.isArray(optionalArr)
+        ? optionalArr.map(ex => mapEx(ex, { isOptional: true }))
+        : [];
+      // Append core exercises if a separate `core` array exists alongside `exercises`.
+      const coreArr = todayPlan.core || [];
+      const core = Array.isArray(coreArr)
+        ? coreArr.map(ex => mapEx({ ...ex, section: 'core' }))
+        : [];
+      return [...main, ...core, ...optional];
     }
     // Cardio day — single exercise
     if (todayPlan.type === 'cardio') {
-      return [{ name: 'cardio', setsReps: '', sets: null, reps: null, extra: todayPlan.description || '', isCore: false, details: null }];
+      return [{ name: 'cardio', setsReps: '', sets: null, reps: null, extra: todayPlan.description || '', isCore: false, isOptional: false, details: null }];
     }
     // Legacy text-based format
     return Fitness.parseExercises(todayPlan.description);
@@ -307,10 +393,18 @@ const Fitness = {
     const typeLabel = todayPlan.type === 'cardio' ? 'Cardio Day' :
                       todayPlan.type === 'strength' ? todayPlan.description || 'Strength Day' :
                       todayPlan.description || todayPlan.type;
+    const mainCount = exercises.filter(e => !e.isOptional && !e.isCore).length;
+    const coreCount = exercises.filter(e => e.isCore).length;
+    const optionalCount = exercises.filter(e => e.isOptional).length;
+    const countParts = [];
+    if (mainCount) countParts.push(`${mainCount} main`);
+    if (coreCount) countParts.push(`${coreCount} core`);
+    if (optionalCount) countParts.push(`${optionalCount} optional`);
+    const countLabel = countParts.length ? countParts.join(' · ') : `${exercises.length} exercise${exercises.length !== 1 ? 's' : ''}`;
     html += `
       <div class="card fitness-day-header" style="text-align:center; padding:var(--space-sm) var(--space-md); margin-bottom:var(--space-sm);">
         <div style="font-size:var(--text-xs); color:var(--text-muted); text-transform:uppercase; font-weight:600;">${UI.escapeHtml(typeLabel)}</div>
-        <div style="font-size:var(--text-sm); color:var(--text-secondary); margin-top:2px;">${exercises.length} exercise${exercises.length !== 1 ? 's' : ''}</div>
+        <div style="font-size:var(--text-sm); color:var(--text-secondary); margin-top:2px;">${countLabel}</div>
       </div>
     `;
 
@@ -324,6 +418,13 @@ const Fitness = {
       // Section divider for Core
       if (ex.isCore && (i === 0 || !exercises[i - 1].isCore)) {
         html += `<div style="font-size:var(--text-xs); font-weight:600; color:var(--text-muted); text-transform:uppercase; margin:var(--space-sm) 0 var(--space-xs);">Core</div>`;
+      }
+      // Section divider for Optional bonus exercises
+      if (ex.isOptional && (i === 0 || !exercises[i - 1].isOptional)) {
+        html += `<div style="font-size:var(--text-xs); font-weight:600; color:var(--text-muted); text-transform:uppercase; margin:var(--space-md) 0 var(--space-xs); display:flex; align-items:center; gap:var(--space-xs);">
+          <span>Optional bonus</span>
+          <span style="font-weight:400; text-transform:none; opacity:0.7;">— add if you have energy</span>
+        </div>`;
       }
 
       // Build set rows for structured exercises

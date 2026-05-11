@@ -941,7 +941,9 @@ const App = {
         const dy = e.changedTouches[0].clientY - startY;
         // Only trigger if horizontal swipe > 50px and more horizontal than vertical
         if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-          const order = ['diet', 'fitness', 'skin'];
+          // Only Diet + Fitness panels exist (the historical Skin panel was
+          // removed). Keep the order short to avoid swiping to a ghost.
+          const order = ['diet', 'fitness'];
           const idx = order.indexOf(App._currentPanel);
           if (dx < 0 && idx < order.length - 1) App.switchPanel(order[idx + 1]);
           if (dx > 0 && idx > 0) App.switchPanel(order[idx - 1]);
@@ -952,8 +954,9 @@ const App = {
 
   switchPanel(panel) {
     App._currentPanel = panel;
-    const order = ['diet', 'fitness', 'skin'];
+    const order = ['diet', 'fitness'];
     const idx = order.indexOf(panel);
+    if (idx < 0) return; // unknown panel name — ignore
 
     // Update segment buttons
     document.querySelectorAll('.today-seg-btn').forEach(btn => {
