@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v241-fitness-progress-parse-notes-and-walks';
+const CACHE_NAME = 'coach-v242-fitness-llm-parser-not-regex';
 
 const ASSETS = [
   './',

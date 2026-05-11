@@ -177,6 +177,15 @@ def main(
         flush=True,
     )
 
+    # Fitness signals — passed raw to synthesis, which structures them into
+    # the analysis.fitness block. We don't parse the notes ourselves; the LLM
+    # is the parser. Multiple input shapes: fitness_notes (free-form text),
+    # fitness_sets (structured checklist), workout entries (already in
+    # all_entries). steps_10k_checked enables the "walk inference" rule.
+    fitness_notes = log_data.get("fitness_notes") or ""
+    fitness_sets = log_data.get("fitness_sets") or {}
+    steps_10k_checked = _check_steps_10k(log_data, date)
+
     print("[process_day] Running day synthesis (Sonnet)...", flush=True)
     synthesis = synthesize(
         date=date,
@@ -188,6 +197,9 @@ def main(
         recent_history=recent_history,
         plan_triggered=plan_should_trigger,
         unanswered_messages=unanswered_messages,
+        fitness_notes=fitness_notes,
+        fitness_sets=fitness_sets,
+        steps_10k_checked=steps_10k_checked,
     )
     print(f"[process_day] Synthesis done: {len(synthesis['coachResponses'])} responses, "
           f"{len(synthesis['highlights'])} highlights", flush=True)
@@ -439,6 +451,56 @@ def _find_photo(entry: dict, extract_dir: Path) -> Path | None:
     return photos[0] if photos else None
 
 
+def _check_steps_10k(log_data: dict, date: str) -> bool:
+    """Whether the user checked '10k steps' on a challenge for this date.
+
+    Used by synthesis to apply the walk-inference rule (1 workout entry +
+    no notes/sets + 10k steps checked = walk).
+
+    The phone uploads challenge progress as part of the daily ZIP. Common
+    shapes:
+      - log_data['challengeProgress']: list of {challengeId, date, checked: [...]}
+      - log_data['challenges']: same as above, alternate key
+      - log_data['challenge_checks']: flat {date: [taskIds]}
+    Returns True if any of these surfaces shows a 10k-steps task checked
+    for this date.
+    """
+    candidates = (
+        log_data.get("challengeProgress")
+        or log_data.get("challenges")
+        or log_data.get("challenge_checks")
+        or []
+    )
+    if isinstance(candidates, dict):
+        # Flat {date: [taskIds]} form
+        checked_today = candidates.get(date) or []
+        return any(_is_10k_task(t) for t in checked_today)
+    if isinstance(candidates, list):
+        for prog in candidates:
+            if not isinstance(prog, dict):
+                continue
+            if prog.get("date") != date:
+                continue
+            checked = prog.get("checked") or []
+            if any(_is_10k_task(t) for t in checked):
+                return True
+    return False
+
+
+def _is_10k_task(task_id) -> bool:
+    """Match any task identifier that represents a 10,000-step checkmark."""
+    if not isinstance(task_id, str):
+        return False
+    t = task_id.lower()
+    return (
+        "steps_10k" in t
+        or "10k_steps" in t
+        or "10000_steps" in t
+        or ("step" in t and "10000" in t)
+        or ("step" in t and "10k" in t)
+    )
+
+
 def _plan_triggered(profile: dict, existing_analysis: dict | None, totals: dict) -> bool:
     """Decide if a plan should be generated/refreshed."""
     if existing_analysis is None:
@@ -604,6 +666,12 @@ def _assemble_analysis(
         output["mealPlan"] = synthesis["mealPlan"]
     if synthesis.get("regimen"):
         output["regimen"] = synthesis["regimen"]
+    if synthesis.get("fitness"):
+        # Structured per-day fitness session: {subtype, sessionLabel, exercises[]}.
+        # The LLM parses fitness_notes + fitness_sets + workout entries into this
+        # canonical shape so the PWA Progress > Fitness tab can render without
+        # any regex/heuristic parser of its own.
+        output["fitness"] = synthesis["fitness"]
     if weight_result:
         output["weight"] = weight_result["value"]
         if weight_result.get("corrected"):

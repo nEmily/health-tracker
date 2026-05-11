@@ -568,18 +568,23 @@ const ProgressView = {
     return 'other';
   },
 
-  // Aggregate all exercise history from FOUR sources:
-  //   1. dailySummary.fitness_sets — the structured checklist tool output
-  //   2. type=workout entries — free-form workout entries the user logs
-  //      from "More -> Workout"
-  //   3. dailySummary.fitness_notes — the Notes field on the Fitness panel.
-  //      Most of Emily's progressive-overload tracking lives here because
-  //      the checklist tool is fiddly to use mid-workout.
-  //   4. Future: walk entries — currently only logged as workout entries
-  //      with subtype='cardio' or freeform description containing 'walk'.
+  // Aggregate exercise history. The cron's daily synthesis is the canonical
+  // parser for free-form workout notes — its output lands in
+  // analysis.fitness = {subtype, sessionLabel, exercises: [{name, sets:[]}]}.
+  // We read that structured field as the primary source. No JS regex parser:
+  // the LLM is the parser, the PWA is the renderer.
   //
-  // Every session record also carries _subtype (strength / cardio / flex)
-  // so the activity strip can render gym days distinctly from walks.
+  // Sources, in priority order:
+  //   1. analysis.fitness (LLM-structured, canonical) — past days
+  //   2. dailySummary.fitness_sets (live checklist check-offs) — today and any
+  //      day the user actively checked sets in the panel
+  //
+  // For days where neither is present, the day shows up empty in the strip.
+  // Live notes-only entries for *today* won't show structured exercises until
+  // the cron runs (~30 min) — by design; we never run a heuristic parser.
+  //
+  // Every session record carries _subtype so the activity strip can
+  // distinguish gym from walk.
   async _buildFitnessHistory() {
     if (ProgressView._fitnessCache) return ProgressView._fitnessCache;
     const all = await DB.getAllDailySummaries();
@@ -591,30 +596,62 @@ const ProgressView = {
       if (subtype) dayMeta[date].subtypes.add(subtype);
     };
 
-    // Collect dates where a 10k-step challenge task was checked off. Emily
-    // historically used the 30 Hard challenge to mark walk days, so when a
-    // workout entry exists for a day BUT no sets / no parsable notes, AND
-    // 10k steps was checked → infer that workout was a walk.
-    const stepsCheckedDays = new Set();
+    // Pull canonical fitness blocks from per-day analysis JSONs (cron output).
+    // These are the LLM-structured fitness sessions -- the source of truth
+    // for historical data. Live (today) data falls back to fitness_sets below.
+    const analysisByDate = {};
     try {
-      // No status arg → all challenges (active + completed + abandoned).
-      const challenges = (await DB.getChallenges?.()) || (await DB.getActiveChallenges?.()) || [];
-      for (const ch of challenges) {
-        const range = await DB.getChallengeProgressRange?.(ch.id, ch.startDate || '2000-01-01', ch.endDate || '2099-12-31');
-        if (!range) continue;
-        for (const p of range) {
-          const checked = p.checked || [];
-          if (checked.some(t => /steps[_-]?10k|10000.*steps?|steps?.*10000|10k.*steps?/i.test(t))) {
-            stepsCheckedDays.add(p.date);
-          }
-        }
+      const allA = (DB.getAllAnalyses && await DB.getAllAnalyses()) || [];
+      for (const a of allA) {
+        if (a && a.date) analysisByDate[a.date] = a;
       }
-    } catch (e) {
-      // Challenges may not be loaded — non-fatal.
-    }
+    } catch (e) { /* non-fatal */ }
 
     for (const summary of all.sort((a, b) => a.date.localeCompare(b.date))) {
-      // Source 1: structured checklist (Fitness panel set checks)
+      const analysis = analysisByDate[summary.date];
+      const fitnessBlock = analysis && analysis.fitness;
+
+      // Source 1 (canonical): analysis.fitness from the cron synthesis.
+      if (fitnessBlock && typeof fitnessBlock === 'object') {
+        const subtype = fitnessBlock.subtype || 'strength';
+        markDay(summary.date, subtype);
+        dayMeta[summary.date].hasParsed = true;
+        const exercises = Array.isArray(fitnessBlock.exercises) ? fitnessBlock.exercises : [];
+        for (const ex of exercises) {
+          if (!ex || !ex.name) continue;
+          const sets = Array.isArray(ex.sets) ? ex.sets : [];
+          const setsArr = sets.map(s => ({
+            reps: s.reps == null ? null : s.reps,
+            weight: s.weight_lbs == null ? (s.weight == null ? null : s.weight) : s.weight_lbs,
+            done: true,
+          }));
+          if (!setsArr.length) continue;
+          if (!map[ex.name]) map[ex.name] = [];
+          map[ex.name].push({
+            date: summary.date,
+            sets: setsArr,
+            _subtype: subtype,
+            _source: 'analysis',
+            _label: fitnessBlock.sessionLabel || '',
+          });
+        }
+        // Cardio/walk with no exercises -- still surface on strip + lists.
+        if (exercises.length === 0 && subtype !== 'strength') {
+          const key = fitnessBlock.sessionLabel || (subtype === 'cardio' ? 'Walk / cardio session' : 'Session');
+          if (!map[key]) map[key] = [];
+          map[key].push({
+            date: summary.date,
+            sets: [{ reps: subtype === 'cardio' ? 'walk' : subtype, done: true }],
+            _subtype: subtype,
+            _source: 'analysis',
+            _label: key,
+          });
+        }
+        continue; // analysis.fitness is authoritative
+      }
+
+      // Source 2 (live fallback): structured checklist set check-offs.
+      // Used for today and any day actively check-marked pre-cron.
       if (summary.fitness_sets) {
         for (const [exName, sets] of Object.entries(summary.fitness_sets)) {
           if (!Array.isArray(sets) || !sets.some(s => s.done)) continue;
@@ -625,182 +662,27 @@ const ProgressView = {
         }
       }
 
-      // Source 2: type=workout entries
+      // Source 3 (live fallback): workout entries with no structure yet.
+      // Surface them so the strip shows ''yes I worked out'' even pre-cron.
       const workouts = (summary.entries || []).filter(e => e.type === 'workout');
-      for (const w of workouts) {
-        let subtype = ProgressView._classifyWorkoutSubtype(w);
-        const parsed = ProgressView._parseFitnessNotes(w.notes || w.description || '');
-        const hasSetsForDay = !!summary.fitness_sets && Object.values(summary.fitness_sets).some(s => Array.isArray(s) && s.some(x => x.done));
-        const hasNotesForDay = !!(summary.fitness_notes && ProgressView._parseFitnessNotes(summary.fitness_notes).length > 0);
-
-        // Walk-day inference: if the user checked "10k steps" on a challenge
-        // for this date AND the workout entry has no parsable sets AND there
-        // are no checked sets and no parsable fitness_notes for the day,
-        // that workout was a walk. Reclassify as cardio.
-        if (parsed.length === 0 && !hasSetsForDay && !hasNotesForDay && stepsCheckedDays.has(summary.date)) {
-          subtype = 'cardio';
-        }
-
+      if (workouts.length && !dayMeta[summary.date].hasParsed) {
+        const subtype = (workouts[0].subtype || '').toLowerCase().includes('cardio') ? 'cardio' : 'strength';
         markDay(summary.date, subtype);
-        for (const { name, sets, reps, weight } of parsed) {
-          if (!map[name]) map[name] = [];
-          const setsArr = Array.from({ length: sets }, () => ({ reps, weight, done: true }));
-          map[name].push({ date: summary.date, sets: setsArr, _subtype: subtype, _source: 'entry' });
-          dayMeta[summary.date].hasParsed = true;
-        }
-        if (parsed.length === 0 && (w.notes || w.description)) {
-          const key = subtype === 'cardio' ? 'Walk / cardio session' : 'Workout (logged)';
-          if (!map[key]) map[key] = [];
-          map[key].push({
-            date: summary.date,
-            sets: [{ reps: '?', done: true }],
-            _subtype: subtype,
-            _source: 'entry',
-            _notes: (w.notes || w.description || '').slice(0, 140),
-          });
-        }
-      }
-
-      // Source 4: 10k-steps-checked days with NO workout entry at all -
-      // still count as a walk so the activity strip lights up the cardio
-      // marker. Without this, walk-only days disappear from the strip.
-      if (stepsCheckedDays.has(summary.date) && !workouts.length) {
-        markDay(summary.date, 'cardio');
-        const key = 'Walk / cardio session';
+        const key = subtype === 'cardio' ? 'Walk / cardio session' : 'Workout (pending sync)';
         if (!map[key]) map[key] = [];
         map[key].push({
           date: summary.date,
-          sets: [{ reps: '10k steps', done: true }],
-          _subtype: 'cardio',
-          _source: 'challenge-10k',
+          sets: [{ reps: '...', done: true }],
+          _subtype: subtype,
+          _source: 'live',
+          _pending: true,
         });
-      }
-
-      // Source 3: dailySummary.fitness_notes — the per-day Notes field on
-      // the Fitness panel. This is where most of Emily's progressive-overload
-      // tracking lives.
-      if (summary.fitness_notes && !dayMeta[summary.date]?.hasParsed) {
-        const parsed = ProgressView._parseFitnessNotes(summary.fitness_notes);
-        for (const { name, sets, reps, weight } of parsed) {
-          if (!map[name]) map[name] = [];
-          const setsArr = Array.from({ length: sets }, () => ({ reps, weight, done: true }));
-          map[name].push({ date: summary.date, sets: setsArr, _subtype: 'strength', _source: 'notes' });
-          markDay(summary.date, 'strength');
-        }
-      } else if (summary.fitness_notes) {
-        // Already had parsed data for this day from another source —
-        // still try fitness_notes since it may contain ADDITIONAL exercises
-        // the checklist didn't cover.
-        const parsed = ProgressView._parseFitnessNotes(summary.fitness_notes);
-        for (const { name, sets, reps, weight } of parsed) {
-          if (!map[name]) map[name] = [];
-          // Skip if we already recorded this exercise on this date
-          if (map[name].some(s => s.date === summary.date)) continue;
-          const setsArr = Array.from({ length: sets }, () => ({ reps, weight, done: true }));
-          map[name].push({ date: summary.date, sets: setsArr, _subtype: 'strength', _source: 'notes' });
-          markDay(summary.date, 'strength');
-        }
       }
     }
 
     ProgressView._fitnessCache = map;
     ProgressView._dayMetaCache = dayMeta;
     return map;
-  },
-
-  // Classify a type=workout entry by its subtype field, falling back to
-  // best-effort keyword detection on description/notes.
-  _classifyWorkoutSubtype(entry) {
-    const raw = (entry.subtype || '').toLowerCase();
-    if (raw.includes('cardio')) return 'cardio';
-    if (raw.includes('flex')) return 'flexibility';
-    if (raw.includes('strength') || raw.includes('mixed') || raw.includes('core')) return 'strength';
-    // Fall back to keyword sniff
-    const text = ((entry.description || '') + ' ' + (entry.notes || '')).toLowerCase();
-    if (/\bwalk\b|\btreadmill\b|\bstep(s)?\b|\bellipt|\bbike\b|\brun\b/.test(text)) return 'cardio';
-    if (/\bstretch|\byoga\b|\bsplit\b|\bmobility\b/.test(text)) return 'flexibility';
-    return 'strength';
-  },
-
-  // Robust parser for free-form workout notes. Each line is treated as ONE
-  // exercise with one or more sets×reps tokens; commas inside the line are
-  // treated as set separators, not exercise separators (this matches how
-  // Emily writes notes — "1x6 50lbs lat pull downs, 1x10 40lbs" is the same
-  // lift across three sets, not three different lifts).
-  //
-  // Examples that this parses correctly (from Emily's real fitness_notes):
-  //   "4x8 hanging leg raises with bent knees"        → 4×8 hanging leg raises
-  //   "3x10 cable crunches 55lbs"                     → 3×10 cable crunches @ 55
-  //   "1x6 50lbs lat pull downs, 1x10 40lbs, 1x6 40lbs" → lat pull downs 3 sets
-  //   "cable kickbacks 44lbs 1x5, 1x7, 1x8"           → cable kickbacks 3 sets @ 44
-  //   "pallof press, each side 1x5 15lbs, 2x5 25lbs"  → pallof press 1×5+2×5
-  //   "3x35s hollow hold with 7.5lbs"                 → hollow 3×35 @ 7.5 (s = seconds)
-  //   "hip abductors going out, 3x10 40lbs"           → hip abductors 3×10 @ 40
-  //   "sumo squats, 26lbs, 3x8"                       → sumo squats 3×8 @ 26
-  // Skips: URLs, single-token lines, lines with no sets×reps.
-  _parseFitnessNotes(notes) {
-    const out = [];
-    if (!notes) return out;
-    // Daily fitness_notes commonly use " / " as a soft line break when
-    // serialized from multi-line input. Treat both / and \n as separators.
-    const lines = notes.split(/[\r\n\/]+/).map(s => s.trim()).filter(Boolean);
-
-    // Filler words to strip from the exercise name. Anything that's
-    // descriptive but not part of the lift's identity.
-    const FILLER = /\b(each\s+(?:side|leg|arm)|heavy|light|medium|xheavy|x-?heavy|tube|loop|band|with|using|on|the|a|going|out|sec(?:ond)?s?|min(?:ute)?s?|hold|seated|standing|kneeling|left|right|both)\b/gi;
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (line.length < 4) continue;
-      if (/^https?:|^www\./i.test(line)) continue;
-
-      // Find every sets×reps token. Allow trailing 's' (e.g. "3x35s" is a
-      // 35-second hold across 3 sets — still record reps=35).
-      const srRe = /(\d{1,2})\s*[x×]\s*(\d{1,3})s?\b/g;
-      const setReps = [...line.matchAll(srRe)]
-        .map(m => ({ sets: parseInt(m[1], 10), reps: parseInt(m[2], 10), idx: m.index }));
-      if (setReps.length === 0) continue;
-
-      // Find every weight token, with position so we can attach the
-      // nearest one to each set×reps.
-      const wRe = /(\d{1,3}\.?\d*)\s*(?:lbs?|kg|pounds?)\b/gi;
-      const weights = [...line.matchAll(wRe)]
-        .map(m => ({ w: parseFloat(m[1]), idx: m.index }));
-
-      // Strip every numeric token, filler word, and punctuation to recover
-      // the exercise name as the residue.
-      let name = line
-        .replace(srRe, ' ')
-        .replace(wRe, ' ')
-        .replace(FILLER, ' ')
-        .replace(/[(),;:"'']/g, ' ')
-        .replace(/[+\-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      // If the residue is empty, junk, or too short to be useful, skip.
-      if (!name || name.length < 3 || !/[a-z]{3,}/i.test(name)) continue;
-
-      // Title-case for consistent grouping
-      name = name.toLowerCase();
-      name = name.charAt(0).toUpperCase() + name.slice(1);
-
-      // For each set×reps token, attach the nearest weight token by char distance.
-      for (const sr of setReps) {
-        let weight = null;
-        if (weights.length) {
-          let best = weights[0];
-          let bestDist = Math.abs(best.idx - sr.idx);
-          for (const w of weights) {
-            const d = Math.abs(w.idx - sr.idx);
-            if (d < bestDist) { bestDist = d; best = w; }
-          }
-          weight = best.w;
-        }
-        out.push({ name, sets: sr.sets, reps: sr.reps, weight });
-      }
-    }
-    return out;
   },
 
   async renderFitness() {

@@ -429,6 +429,18 @@ async function getAnalysis(dateStr) {
   });
 }
 
+// Return every persisted analysis JSON. Used by the Progress > Fitness tab
+// to read the structured fitness blocks the cron synthesis produces.
+async function getAllAnalyses() {
+  const db = await openDB();
+  const tx = db.transaction('analysis', 'readonly');
+  const request = tx.objectStore('analysis').getAll();
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
 async function importAnalysis(dateStr, data) {
   const db = await openDB();
 
@@ -912,6 +924,22 @@ async function exportDay(dateStr) {
     }
   }
 
+  // Collect challenge progress for this date across every active or completed
+  // challenge. Used by the cron's walk inference rule (10k steps checked +
+  // workout entry with no notes = walk).
+  let challengeProgress = null;
+  try {
+    const chals = (await getChallenges()) || [];
+    const today = [];
+    for (const ch of chals) {
+      const p = await getChallengeProgress(ch.id, dateStr);
+      if (p && Array.isArray(p.checked) && p.checked.length) {
+        today.push({ challengeId: ch.id, date: dateStr, checked: p.checked });
+      }
+    }
+    if (today.length) challengeProgress = today;
+  } catch (e) { /* non-fatal */ }
+
   const log = {
     date: dateStr,
     entries,
@@ -923,6 +951,7 @@ async function exportDay(dateStr) {
     fitness_checked: summary.fitness_checked || null,
     fitness_sets: summary.fitness_sets || null,
     fitness_notes: summary.fitness_notes || null,
+    challengeProgress,
     period: periodInfo,
   };
 
@@ -1169,6 +1198,7 @@ window.DB = {
   getPhotoSyncStatus,
   clearProcessedPhotos,
   getAnalysis,
+  getAllAnalyses,
   importAnalysis,
   getAnalysisRange,
   getAnalysisHistory,

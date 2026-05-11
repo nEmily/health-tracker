@@ -21,6 +21,7 @@ _OUTPUT_SCHEMA = {
     "concerns": "list of strings",
     "mealPlan": "null OR {source, days: [...]}",
     "regimen": "null OR {weeklySchedule: [...]}",
+    "fitness": "null OR {subtype, sessionLabel, exercises: [{name, sets: [{reps, weight_lbs}]}]}",
     "plan_decision_reason": "string",
 }
 
@@ -37,6 +38,9 @@ def synthesize(
     model: str = _DEFAULT_MODEL,
     grounding_feedback: str = "",
     unanswered_messages: list | None = None,
+    fitness_notes: str | None = None,
+    fitness_sets: dict | None = None,
+    steps_10k_checked: bool = False,
 ) -> dict:
     """Run the holistic day synthesis.
 
@@ -54,6 +58,9 @@ def synthesize(
         date, profile, totals, goals_block, all_entries,
         coach_messages, recent_history, plan_triggered,
         unanswered_messages=unanswered_messages,
+        fitness_notes=fitness_notes,
+        fitness_sets=fitness_sets,
+        steps_10k_checked=steps_10k_checked,
     )
     if grounding_feedback:
         prompt += f"\n\nGROUNDING CORRECTION REQUIRED: {grounding_feedback}"
@@ -80,6 +87,9 @@ def _build_synthesis_prompt(
     date, profile, totals, goals_block, all_entries,
     coach_messages, recent_history, plan_triggered,
     unanswered_messages=None,
+    fitness_notes=None,
+    fitness_sets=None,
+    steps_10k_checked=False,
 ) -> str:
     prefs = profile.get("preferences") or {}
     coaching_tone = prefs.get("coachingTone") or prefs.get("coaching_tone") or {}
@@ -192,6 +202,9 @@ TODAY'S ENTRIES (the ONLY entries that belong to today):
 TODAY'S WEIGHT:
 {weight_block}
 
+TODAY'S FITNESS DATA (raw — your job is to structure it):
+{_format_fitness_block(fitness_notes, fitness_sets, all_entries, steps_10k_checked)}
+
 COACH MESSAGES (conversation history):
 {messages_str}
 {unanswered_section}
@@ -229,8 +242,55 @@ REQUIRED OUTPUT SCHEMA (return this exact JSON structure):
   "goalUpdates": null,
   "mealPlan": null,
   "regimen": null,
+  "fitness": null,
   "plan_decision_reason": "<fresh-day|coach-session-preserved|not-stale|plan-requested>"
 }}
+
+FITNESS STRUCTURING:
+Parse the raw fitness data above into the "fitness" output field. The user's
+notes are free-form personal shorthand (commas as set separators, name-first
+or sets-first ordering, weights anywhere, "each side"/"hold"/seconds notation).
+You are the parser — extract structured exercises naturally. DO NOT skip data
+because it's stylistically irregular.
+
+fitness SCHEMA (set to null only if there was zero fitness activity AND no
+10k steps checked):
+{{
+  "subtype": "strength" | "cardio" | "flexibility" | "mixed",
+  "sessionLabel": "<short label like 'Day A - Obliques + Glutes' or 'Walk' or 'Cable + free weights' — match the day's regimen block if applicable>",
+  "exercises": [
+    {{
+      "name": "<canonical exercise name, e.g. 'Cable crunch' not 'cable crunches' — singular, title-case>",
+      "sets": [
+        {{"reps": <int>, "weight_lbs": <number or null>}},
+        ...one entry per set actually performed
+      ]
+    }}
+  ]
+}}
+
+Rules for the fitness block:
+- If the user wrote "1x6 50lbs lat pull downs, 1x10 40lbs, 1x6 40lbs" — that's
+  ONE exercise (lat pulldown) with THREE sets (6@50, 10@40, 6@40). Not three
+  exercises.
+- If the user wrote "3x10 cable crunch 55lbs" — that's THREE sets of 10@55.
+- "Each side" doubles the work but doesn't double the set count — record sets
+  as written (e.g. "1x5 each side" is one set of 5 reps; add a "each side"
+  marker in the name only if it disambiguates).
+- "3x35s" or "3x30 seconds" is a time hold across 3 sets. Record reps as the
+  seconds count and put "(hold)" or "(s)" in the name to flag it.
+- Canonicalize names: "cable crunches" → "Cable crunch", "lat pull downs" →
+  "Lat pulldown", "goblin squats" → "Goblet squat" (common typo).
+- subtype "strength" for gym/weight work, "cardio" for walks/elliptical/bike/
+  treadmill, "flexibility" for splits/stretches/yoga, "mixed" only if the
+  session genuinely combines two (e.g. strength + dedicated cardio block).
+- WALK INFERENCE: If a workout entry exists but contains no parsable sets AND
+  the day has no fitness_notes AND "10k steps checked: TRUE" appears in the
+  fitness data above, classify that workout as cardio with sessionLabel "Walk"
+  and exercises: []. Do the same if 10k steps was checked without any workout
+  entry — emit fitness with subtype=cardio, sessionLabel="Walk", exercises=[].
+- If the raw fitness data section says "(none)" for everything AND 10k steps
+  was NOT checked, set "fitness": null. Do not invent activity.
 
 GOAL UPDATES FROM CHAT:
 If the user EXPLICITLY asks to change a goal in chat (e.g. "bump my
@@ -399,6 +459,74 @@ def _format_weight_block(all_entries: list, profile: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_fitness_block(
+    fitness_notes: str | None,
+    fitness_sets: dict | None,
+    all_entries: list,
+    steps_10k_checked: bool,
+) -> str:
+    """Format the raw fitness signals for the synthesis prompt.
+
+    The LLM is the parser — we just lay out the inputs verbatim so it
+    can structure them.
+    """
+    lines = []
+
+    # The free-form per-day notes field (this is where most of the user's
+    # progressive-overload tracking lives — they write it during/after the
+    # workout instead of using the checklist).
+    if fitness_notes and fitness_notes.strip():
+        lines.append("fitness_notes (per-day notes field):")
+        lines.append(f"  \"\"\"{fitness_notes.strip()}\"\"\"")
+    else:
+        lines.append("fitness_notes: (none)")
+
+    # The structured checklist data (set check-offs from the Fitness panel).
+    if fitness_sets and isinstance(fitness_sets, dict):
+        done_sets = []
+        for ex_name, sets in fitness_sets.items():
+            if not isinstance(sets, list):
+                continue
+            checked = [s for s in sets if isinstance(s, dict) and s.get("done")]
+            if checked:
+                summary = []
+                for s in checked:
+                    r = s.get("reps")
+                    w = s.get("weight")
+                    summary.append(f"{r}r" + (f"@{w}" if w else ""))
+                done_sets.append(f"  - {ex_name}: {', '.join(summary)}")
+        if done_sets:
+            lines.append("fitness_sets (checklist set check-offs):")
+            lines.extend(done_sets)
+        else:
+            lines.append("fitness_sets: (none done)")
+    else:
+        lines.append("fitness_sets: (none)")
+
+    # Workout-typed entries (sometimes the user logs a quick free-form workout
+    # entry instead of using the per-day notes).
+    workouts = [e for e in (all_entries or []) if e.get("type") == "workout"]
+    if workouts:
+        lines.append("workout entries logged today:")
+        for w in workouts:
+            subtype = w.get("subtype", "")
+            dur = w.get("duration")
+            dur_str = f", {dur} min" if dur else ""
+            desc = w.get("description") or "(no description)"
+            notes = w.get("notes") or ""
+            lines.append(f"  - [{subtype}{dur_str}] {desc}")
+            if notes:
+                lines.append(f"    notes: {notes}")
+    else:
+        lines.append("workout entries: (none)")
+
+    # 10k-step checkmark on the 30 Hard or similar challenge — used to infer
+    # walks per the user's rule: 10k steps + 1 workout + no notes/sets = walk.
+    lines.append(f"10k steps checked: {'TRUE' if steps_10k_checked else 'false'}")
+
+    return "\n".join(lines)
+
+
 def _summarize_entries(entries: list) -> str:
     if not entries:
         return "(no entries)"
@@ -521,6 +649,15 @@ def _normalize_synthesis(result: dict) -> dict:
     gu = result.get("goalUpdates")
     if not isinstance(gu, dict) or not gu:
         gu = None
+    fitness = result.get("fitness")
+    if not isinstance(fitness, dict) or not fitness:
+        fitness = None
+    elif fitness:
+        # Light shape sanity — exercises must be a list, each with name +
+        # sets. If malformed, drop to null rather than propagating garbage.
+        exs = fitness.get("exercises")
+        if exs is not None and not isinstance(exs, list):
+            fitness = None
     return {
         "coachResponses": _normalize_coach_responses(result.get("coachResponses") or []),
         "highlights": result.get("highlights") or [],
@@ -528,6 +665,7 @@ def _normalize_synthesis(result: dict) -> dict:
         "goalUpdates": gu,
         "mealPlan": result.get("mealPlan"),
         "regimen": result.get("regimen"),
+        "fitness": fitness,
         "plan_decision_reason": result.get("plan_decision_reason", ""),
     }
 
