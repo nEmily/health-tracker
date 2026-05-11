@@ -2920,6 +2920,8 @@ input[type="range"]::-webkit-slider-thumb {
   gap: var(--space-xs);
   padding: var(--space-md);
   -webkit-overflow-scrolling: touch;
+  /* Stop rubber-band chain to body — see .screen.active for full rationale. */
+  overscroll-behavior-y: contain;
 }
 
 /* Empty state inside the message area */

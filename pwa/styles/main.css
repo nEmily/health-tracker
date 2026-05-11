@@ -21,6 +21,9 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   touch-action: manipulation;
+  /* iOS: stop the entire page from rubber-banding when the address bar
+     shows/hides during scroll. Inner scrollers handle their own bouncing. */
+  overscroll-behavior-y: none;
 }
 
 /* App Layout */
@@ -48,11 +51,16 @@ body {
   flex-direction: column;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* Don't let scroll-end bounce chain up to body — kills iOS rubber-band feel
+     and prevents pull-to-refresh from firing inside the app. */
+  overscroll-behavior-y: contain;
 }
 
+/* Fade only — never translate. A translateY on every tab switch made content
+   "jiggle" the moment a user tried to scroll right after switching tabs. */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideInUp {

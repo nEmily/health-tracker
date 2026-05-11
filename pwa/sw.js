@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v238-chat-edge-to-edge-no-dead-zone';
+const CACHE_NAME = 'coach-v239-scroll-overscroll-contain-no-jiggle';
 
 const ASSETS = [
   './',
