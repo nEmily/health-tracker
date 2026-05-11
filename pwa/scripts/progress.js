@@ -44,6 +44,15 @@ const ProgressView = {
       });
     });
 
+    // If the active segment-btn is clipped by the right-edge fade (5 pills
+    // overflow at 320px), scroll it into view so the user can read its label.
+    requestAnimationFrame(() => {
+      const activeBtn = container.querySelector('.segment-btn.active');
+      if (activeBtn && typeof activeBtn.scrollIntoView === 'function') {
+        activeBtn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' });
+      }
+    });
+
     // Wire adaptive calorie suggestion buttons (Insights tab)
     if (activeTab === 'insights') {
       const acceptBtn = container.querySelector('.adaptive-accept-btn');
@@ -414,7 +423,7 @@ const ProgressView = {
     const prot = plan.macros?.protein?.grams ?? plan.macros?.protein?.target
               ?? plan.protein?.grams ?? plan.protein ?? '—';
     const fat = plan.macros?.fat?.grams ?? plan.macros?.fat?.target
-             ?? plan.fat?.grams ?? plan.fat ?? '—';
+             ?? plan.macros?.fat?.floor ?? plan.fat?.grams ?? plan.fat?.floor ?? plan.fat ?? null;
     const water = plan.water_oz ?? plan.water?.daily_oz ?? plan.water ?? '—';
     const fiber = plan.fiber?.daily_g ?? plan.fiber?.target ?? plan.fiber ?? null;
 
@@ -432,11 +441,11 @@ const ProgressView = {
         <div style="font-size:var(--text-lg); font-weight:600;">${water} oz</div>
         <div style="font-size:var(--text-xs); color:var(--text-muted);">water</div>
       </div>
-      <div style="text-align:center;">
+      ${fat ? `<div style="text-align:center;">
         <div style="font-size:var(--text-lg); font-weight:600;">${fat}g</div>
         <div style="font-size:var(--text-xs); color:var(--text-muted);">fat floor</div>
-      </div>
-      ${fiber ? `<div style="text-align:center; grid-column: 1 / -1;">
+      </div>` : ''}
+      ${fiber ? `<div style="text-align:center;${fat ? '' : ' grid-column: 1 / -1;'}">
         <div style="font-size:var(--text-lg); font-weight:600;">${fiber}g</div>
         <div style="font-size:var(--text-xs); color:var(--text-muted);">fiber target</div>
       </div>` : ''}

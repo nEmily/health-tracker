@@ -369,6 +369,14 @@
   border-radius: var(--radius-full);
   padding: 3px;
   margin-bottom: var(--space-md);
+  /* At narrow viewports (320px) 5 pills overflow. The fade hint + snap
+     make the horizontal scroll discoverable and feel intentional. */
+  scroll-snap-type: x proximity;
+  position: relative;
+  /* Right-edge fade hint cut into the border-radius so it doesn't bleed
+     outside the pill shape. */
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
 }
 
 .segment-control::-webkit-scrollbar {
@@ -389,6 +397,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
+  scroll-snap-align: start;
 }
 
 .segment-btn.active {

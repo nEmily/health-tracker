@@ -252,6 +252,7 @@ def main(
         synthesis=synthesis,
         pwa_profile=pwa_profile_data,
         weight_result=weight_result,
+        profile=profile,
     )
 
     # Chat immutability rule (Part 7.1): coachResponses entries are append-only.
@@ -647,7 +648,8 @@ def _strip_grounding_violations(synthesis: dict, violations: list[str]) -> dict:
 
 
 def _assemble_analysis(
-    date, entries, totals, goals_block, streaks, synthesis, pwa_profile, weight_result
+    date, entries, totals, goals_block, streaks, synthesis, pwa_profile, weight_result,
+    profile=None,
 ) -> dict:
     output: dict = {
         "date": date,
@@ -664,8 +666,14 @@ def _assemble_analysis(
     }
     if synthesis.get("mealPlan"):
         output["mealPlan"] = synthesis["mealPlan"]
+    # Regimen propagation: synthesis emits a fresh regimen only when plan
+    # regeneration was triggered. On every other tick, echo the on-disk
+    # profile/regimen.json so user-edited schedules reach the phone without
+    # having to wait for a plan regeneration cycle.
     if synthesis.get("regimen"):
         output["regimen"] = synthesis["regimen"]
+    elif profile and profile.get("regimen"):
+        output["regimen"] = profile["regimen"]
     if synthesis.get("fitness"):
         # Structured per-day fitness session: {subtype, sessionLabel, exercises[]}.
         # The LLM parses fitness_notes + fitness_sets + workout entries into this

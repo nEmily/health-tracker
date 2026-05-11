@@ -1,5 +1,5 @@
 // Service Worker — Health Tracker PWA
-const CACHE_NAME = 'coach-v243-day-analysis-card-restored-and-fitness-crash-fixed';
+const CACHE_NAME = 'coach-v244-regimen-echo-segment-overflow-fat-floor';
 
 const ASSETS = [
   './',
